@@ -402,3 +402,161 @@ def test_target_distribution_plot_uses_report_classes() -> None:
         ]
     finally:
         plt.close(figure)
+
+
+def test_continuous_target_reports_distribution_range_and_extremes() -> None:
+    from scripts.analyze_target import analyze_continuous_target_distribution
+
+    dataframe = pd.DataFrame(
+        {"Strength": [10.0, 12.0, 14.0, 16.0, 18.0, 100.0]}
+    )
+    report = analyze_continuous_target_distribution(
+        dataframe,
+        target="Strength",
+        unit="MPa",
+    )
+
+    assert report.row_count == 6
+    assert report.finite_count == 6
+    assert report.missing_count == 0
+    assert report.non_finite_count == 0
+    assert report.minimum == pytest.approx(10.0)
+    assert report.maximum == pytest.approx(100.0)
+    assert report.observed_range == pytest.approx(90.0)
+    assert report.median == pytest.approx(15.0)
+    assert report.iqr is not None
+    assert report.upper_extreme_count == 1
+    assert report.lower_extreme_count == 0
+    assert report.extreme_count == 1
+    assert report.extreme_share == pytest.approx(1 / 6)
+
+
+def test_continuous_target_quantiles_and_summary_are_deterministic() -> None:
+    from scripts.analyze_target import analyze_continuous_target_distribution
+
+    dataframe = pd.DataFrame({"Strength": [1.0, 2.0, 3.0, 4.0, 5.0]})
+    report = analyze_continuous_target_distribution(
+        dataframe,
+        target="Strength",
+        unit="MPa",
+    )
+
+    summary = report.summary_frame()
+    quantiles = report.quantiles_frame()
+    extremes = report.extremes_frame()
+
+    assert list(summary.columns) == ["Metric", "Value", "Interpretation"]
+    assert list(quantiles["Quantile"]) == [
+        "1%", "5%", "25%", "50%", "75%", "95%", "99%"
+    ]
+    assert set(quantiles["Unit"]) == {"MPa"}
+    assert list(extremes["Side"]) == ["Lower", "Upper"]
+
+
+def test_continuous_target_reports_missing_and_non_finite_values() -> None:
+    from scripts.analyze_target import (
+        TargetAnalysisError,
+        analyze_continuous_target_distribution,
+    )
+
+    dataframe = pd.DataFrame(
+        {"Strength": [10.0, None, float("inf"), 20.0]}
+    )
+    report = analyze_continuous_target_distribution(
+        dataframe,
+        target="Strength",
+    )
+
+    assert report.missing_count == 1
+    assert report.non_finite_count == 1
+    assert report.finite_count == 2
+    assert list(report.issues_frame()["Issue"]) == [
+        "Missing target values",
+        "Non-finite target values",
+    ]
+
+    with pytest.raises(
+        TargetAnalysisError,
+        match="missing_target_values:1; non_finite_target_values:1",
+    ):
+        report.raise_if_invalid()
+
+
+def test_continuous_target_rejects_non_numeric_values() -> None:
+    from scripts.analyze_target import (
+        TargetAnalysisError,
+        analyze_continuous_target_distribution,
+    )
+
+    dataframe = pd.DataFrame({"Strength": [10.0, "bad", 20.0]})
+
+    with pytest.raises(
+        TargetAnalysisError,
+        match="non-numeric non-missing values: 1",
+    ):
+        analyze_continuous_target_distribution(
+            dataframe,
+            target="Strength",
+        )
+
+
+def test_continuous_target_constant_values_are_invalid_by_default() -> None:
+    from scripts.analyze_target import (
+        TargetAnalysisError,
+        analyze_continuous_target_distribution,
+    )
+
+    report = analyze_continuous_target_distribution(
+        pd.DataFrame({"Strength": [5.0, 5.0, 5.0]}),
+        target="Strength",
+    )
+
+    assert not report.has_variation
+    with pytest.raises(TargetAnalysisError, match="constant_target"):
+        report.raise_if_invalid()
+
+
+def test_continuous_target_analysis_does_not_modify_dataframe() -> None:
+    from scripts.analyze_target import analyze_continuous_target_distribution
+
+    dataframe = pd.DataFrame(
+        {"Strength": [10.0, 20.0, 30.0]},
+        index=[3, 6, 9],
+    )
+    before = dataframe.copy(deep=True)
+
+    analyze_continuous_target_distribution(
+        dataframe,
+        target="Strength",
+        unit="MPa",
+    )
+
+    pd.testing.assert_frame_equal(dataframe, before)
+
+
+def test_continuous_target_plot_uses_original_scale_label() -> None:
+    from matplotlib import pyplot as plt
+
+    from scripts.analyze_target import (
+        analyze_continuous_target_distribution,
+        plot_continuous_target_distribution,
+    )
+
+    report = analyze_continuous_target_distribution(
+        pd.DataFrame({"Strength": [10.0, 20.0, 30.0, 40.0]}),
+        target="Strength",
+        unit="MPa",
+    )
+    figure = plot_continuous_target_distribution(
+        report,
+        title="Concrete target distribution",
+        bins=4,
+    )
+
+    try:
+        axis = figure.axes[0]
+        assert axis.get_title() == "Concrete target distribution"
+        assert axis.get_xlabel() == "Strength (MPa)"
+        assert axis.get_ylabel() == "Observation count"
+    finally:
+        plt.close(figure)

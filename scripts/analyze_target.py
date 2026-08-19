@@ -1,10 +1,10 @@
-"""Reusable, non-mutating analysis of categorical target distributions."""
+"""Reusable, non-mutating analysis of categorical and continuous targets."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from math import log
+from math import isfinite, log
 from typing import Final
 
 import pandas as pd
@@ -577,6 +577,411 @@ def plot_target_distribution(
     figure.tight_layout()
     return figure
 
+
+
+@dataclass(frozen=True, slots=True)
+class ContinuousTargetDistributionReport:
+    """Summarize a numeric target's distribution, range, and extremes."""
+
+    target: str
+    unit: str | None
+    row_count: int
+    non_missing_count: int
+    missing_count: int
+    finite_count: int
+    non_finite_count: int
+    unique_count: int
+    minimum: float | None
+    q01: float | None
+    q05: float | None
+    q25: float | None
+    median: float | None
+    mean: float | None
+    q75: float | None
+    q95: float | None
+    q99: float | None
+    maximum: float | None
+    standard_deviation: float | None
+    iqr: float | None
+    lower_tukey_fence: float | None
+    upper_tukey_fence: float | None
+    lower_extreme_count: int
+    upper_extreme_count: int
+    finite_values: tuple[float, ...]
+
+    @property
+    def observed_range(self) -> float | None:
+        """Return maximum minus minimum for finite target values."""
+        if self.minimum is None or self.maximum is None:
+            return None
+        return self.maximum - self.minimum
+
+    @property
+    def has_missing_values(self) -> bool:
+        """Return whether the target contains missing values."""
+        return self.missing_count > 0
+
+    @property
+    def has_non_finite_values(self) -> bool:
+        """Return whether non-missing target values include infinities."""
+        return self.non_finite_count > 0
+
+    @property
+    def has_variation(self) -> bool:
+        """Return whether at least two distinct finite target values exist."""
+        return self.unique_count > 1
+
+    @property
+    def extreme_count(self) -> int:
+        """Return observations outside the descriptive 1.5-IQR fences."""
+        return self.lower_extreme_count + self.upper_extreme_count
+
+    @property
+    def extreme_share(self) -> float | None:
+        """Return share of finite observations outside 1.5-IQR fences."""
+        if self.finite_count == 0:
+            return None
+        return self.extreme_count / self.finite_count
+
+    def summary_frame(self) -> pd.DataFrame:
+        """Return deterministic summary metrics for the continuous target."""
+
+        def metric(value: float | None) -> object:
+            if value is None:
+                return "Not available"
+            return round(value, 6)
+
+        rows = [
+            {
+                "Metric": "Total rows",
+                "Value": self.row_count,
+                "Interpretation": "All observations",
+            },
+            {
+                "Metric": "Finite target values",
+                "Value": self.finite_count,
+                "Interpretation": "Rows used for numerical summaries",
+            },
+            {
+                "Metric": "Missing target values",
+                "Value": self.missing_count,
+                "Interpretation": (
+                    "Requires review"
+                    if self.has_missing_values
+                    else "No missing target values"
+                ),
+            },
+            {
+                "Metric": "Non-finite target values",
+                "Value": self.non_finite_count,
+                "Interpretation": (
+                    "Requires review"
+                    if self.has_non_finite_values
+                    else "All non-missing target values are finite"
+                ),
+            },
+            {
+                "Metric": "Distinct finite values",
+                "Value": self.unique_count,
+                "Interpretation": "Observed target-value diversity",
+            },
+            {
+                "Metric": "Minimum",
+                "Value": metric(self.minimum),
+                "Interpretation": _with_unit("Observed minimum", self.unit),
+            },
+            {
+                "Metric": "Mean",
+                "Value": metric(self.mean),
+                "Interpretation": _with_unit("Arithmetic mean", self.unit),
+            },
+            {
+                "Metric": "Median",
+                "Value": metric(self.median),
+                "Interpretation": _with_unit("50th percentile", self.unit),
+            },
+            {
+                "Metric": "Maximum",
+                "Value": metric(self.maximum),
+                "Interpretation": _with_unit("Observed maximum", self.unit),
+            },
+            {
+                "Metric": "Observed range",
+                "Value": metric(self.observed_range),
+                "Interpretation": _with_unit("Maximum minus minimum", self.unit),
+            },
+            {
+                "Metric": "Standard deviation",
+                "Value": metric(self.standard_deviation),
+                "Interpretation": _with_unit("Sample standard deviation", self.unit),
+            },
+            {
+                "Metric": "Interquartile range",
+                "Value": metric(self.iqr),
+                "Interpretation": _with_unit("Q3 minus Q1", self.unit),
+            },
+            {
+                "Metric": "Outside 1.5-IQR fences",
+                "Value": self.extreme_count,
+                "Interpretation": (
+                    "Descriptive extreme-value signal; not an automatic "
+                    "outlier-removal rule"
+                ),
+            },
+        ]
+        return pd.DataFrame(rows, columns=_SUMMARY_COLUMNS)
+
+    def quantiles_frame(self) -> pd.DataFrame:
+        """Return selected quantiles in deterministic order."""
+        rows = [
+            ("1%", self.q01),
+            ("5%", self.q05),
+            ("25%", self.q25),
+            ("50%", self.median),
+            ("75%", self.q75),
+            ("95%", self.q95),
+            ("99%", self.q99),
+        ]
+        return pd.DataFrame(
+            [
+                {
+                    "Quantile": label,
+                    "Value": (
+                        "Not available"
+                        if value is None
+                        else round(value, 6)
+                    ),
+                    "Unit": self.unit or "Not specified",
+                }
+                for label, value in rows
+            ],
+            columns=["Quantile", "Value", "Unit"],
+        )
+
+    def extremes_frame(self) -> pd.DataFrame:
+        """Return descriptive Tukey-fence evidence without removal advice."""
+        rows = [
+            {
+                "Side": "Lower",
+                "Fence": self.lower_tukey_fence,
+                "Observed extreme": self.minimum,
+                "Count outside fence": self.lower_extreme_count,
+            },
+            {
+                "Side": "Upper",
+                "Fence": self.upper_tukey_fence,
+                "Observed extreme": self.maximum,
+                "Count outside fence": self.upper_extreme_count,
+            },
+        ]
+        frame = pd.DataFrame(rows)
+        for column in ("Fence", "Observed extreme"):
+            frame[column] = frame[column].map(
+                lambda value: (
+                    "Not available"
+                    if value is None
+                    else round(float(value), 6)
+                )
+            )
+        return frame
+
+    def issues_frame(self) -> pd.DataFrame:
+        """Return target conditions that invalidate numeric interpretation."""
+        rows: list[dict[str, object]] = []
+        if self.has_missing_values:
+            rows.append(
+                {
+                    "Issue": "Missing target values",
+                    "Count": self.missing_count,
+                    "Values": "<missing>",
+                    "Potential impact": (
+                        "Rows without target values cannot support supervised "
+                        "regression training or target-based evaluation."
+                    ),
+                }
+            )
+        if self.has_non_finite_values:
+            rows.append(
+                {
+                    "Issue": "Non-finite target values",
+                    "Count": self.non_finite_count,
+                    "Values": "<+/-inf>",
+                    "Potential impact": (
+                        "Infinite target values invalidate ordinary regression "
+                        "losses and numerical summary statistics."
+                    ),
+                }
+            )
+        if self.finite_count > 0 and not self.has_variation:
+            rows.append(
+                {
+                    "Issue": "Constant target",
+                    "Count": self.finite_count,
+                    "Values": repr(self.minimum),
+                    "Potential impact": (
+                        "A constant target does not define a meaningful "
+                        "continuous regression prediction problem."
+                    ),
+                }
+            )
+        return pd.DataFrame(rows, columns=_ISSUE_COLUMNS)
+
+    def raise_if_invalid(
+        self,
+        *,
+        require_no_missing_target: bool = True,
+        require_all_values_finite: bool = True,
+        require_variation: bool = True,
+    ) -> None:
+        """Raise when configured continuous-target expectations fail."""
+        failures: list[str] = []
+        if require_no_missing_target and self.has_missing_values:
+            failures.append(f"missing_target_values:{self.missing_count}")
+        if require_all_values_finite and self.has_non_finite_values:
+            failures.append(f"non_finite_target_values:{self.non_finite_count}")
+        if require_variation and self.finite_count > 0 and not self.has_variation:
+            failures.append("constant_target")
+        if self.finite_count == 0:
+            failures.append("no_finite_target_values")
+        if failures:
+            raise TargetAnalysisError(
+                "Continuous target validation failed: " + "; ".join(failures)
+            )
+
+
+def analyze_continuous_target_distribution(
+    dataframe: pd.DataFrame,
+    *,
+    target: str,
+    unit: str | None = None,
+) -> ContinuousTargetDistributionReport:
+    """Analyze a continuous numeric target without mutating the DataFrame."""
+    if not isinstance(dataframe, pd.DataFrame):
+        raise TypeError("dataframe must be a pandas DataFrame.")
+
+    target_name = _normalize_column_name(target, field="target")
+    _require_unique_columns(dataframe)
+    if target_name not in dataframe.columns:
+        raise KeyError(f"Target column not found: {target_name!r}")
+
+    normalized_unit = None
+    if unit is not None:
+        normalized_unit = _normalize_column_name(unit, field="unit")
+
+    target_series = dataframe[target_name]
+    missing_mask = target_series.isna()
+    observed = target_series.loc[~missing_mask]
+    numeric = pd.to_numeric(observed, errors="coerce")
+
+    conversion_failures = numeric.isna()
+    if bool(conversion_failures.any()):
+        raise TargetAnalysisError(
+            "Continuous target contains non-numeric non-missing values: "
+            f"{int(conversion_failures.sum())}"
+        )
+
+    finite_mask = numeric.map(lambda value: isfinite(float(value)))
+    finite = numeric.loc[finite_mask].astype(float)
+    finite_count = int(finite.shape[0])
+    non_finite_count = int((~finite_mask).sum())
+
+    if finite_count:
+        quantiles = finite.quantile(
+            [0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99]
+        )
+        minimum = float(finite.min())
+        maximum = float(finite.max())
+        mean = float(finite.mean())
+        median = float(quantiles.loc[0.50])
+        q01 = float(quantiles.loc[0.01])
+        q05 = float(quantiles.loc[0.05])
+        q25 = float(quantiles.loc[0.25])
+        q75 = float(quantiles.loc[0.75])
+        q95 = float(quantiles.loc[0.95])
+        q99 = float(quantiles.loc[0.99])
+        iqr = q75 - q25
+        lower_fence = q25 - 1.5 * iqr
+        upper_fence = q75 + 1.5 * iqr
+        lower_extreme_count = int((finite < lower_fence).sum())
+        upper_extreme_count = int((finite > upper_fence).sum())
+        standard_deviation_value = finite.std(ddof=1)
+        standard_deviation = (
+            None
+            if pd.isna(standard_deviation_value)
+            else float(standard_deviation_value)
+        )
+        finite_values = tuple(float(value) for value in finite.tolist())
+    else:
+        minimum = maximum = mean = median = None
+        q01 = q05 = q25 = q75 = q95 = q99 = None
+        iqr = lower_fence = upper_fence = None
+        lower_extreme_count = upper_extreme_count = 0
+        standard_deviation = None
+        finite_values = ()
+
+    return ContinuousTargetDistributionReport(
+        target=target_name,
+        unit=normalized_unit,
+        row_count=len(dataframe),
+        non_missing_count=int((~missing_mask).sum()),
+        missing_count=int(missing_mask.sum()),
+        finite_count=finite_count,
+        non_finite_count=non_finite_count,
+        unique_count=int(finite.nunique(dropna=True)),
+        minimum=minimum,
+        q01=q01,
+        q05=q05,
+        q25=q25,
+        median=median,
+        mean=mean,
+        q75=q75,
+        q95=q95,
+        q99=q99,
+        maximum=maximum,
+        standard_deviation=standard_deviation,
+        iqr=iqr,
+        lower_tukey_fence=lower_fence,
+        upper_tukey_fence=upper_fence,
+        lower_extreme_count=lower_extreme_count,
+        upper_extreme_count=upper_extreme_count,
+        finite_values=finite_values,
+    )
+
+
+def plot_continuous_target_distribution(
+    report: ContinuousTargetDistributionReport,
+    *,
+    title: str,
+    bins: int = 30,
+):
+    """Create a histogram for a continuous target on its original scale."""
+    if not isinstance(report, ContinuousTargetDistributionReport):
+        raise TypeError("report must be a ContinuousTargetDistributionReport.")
+    if not isinstance(title, str) or not title.strip():
+        raise TargetAnalysisError("title must be a non-empty string.")
+    if not isinstance(bins, int) or isinstance(bins, bool) or bins <= 0:
+        raise TargetAnalysisError("bins must be a positive integer.")
+    if not report.finite_values:
+        raise TargetAnalysisError("report contains no finite target values to plot.")
+
+    from matplotlib import pyplot as plt
+
+    figure, axis = plt.subplots(figsize=(10, 5))
+    axis.hist(report.finite_values, bins=bins)
+    axis.set_title(title.strip())
+    xlabel = report.target
+    if report.unit:
+        xlabel += f" ({report.unit})"
+    axis.set_xlabel(xlabel)
+    axis.set_ylabel("Observation count")
+    figure.tight_layout()
+    return figure
+
+
+def _with_unit(label: str, unit: str | None) -> str:
+    if not unit:
+        return label
+    return f"{label} ({unit})"
 
 
 def _class_role(
