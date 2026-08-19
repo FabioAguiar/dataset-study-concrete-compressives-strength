@@ -1459,6 +1459,956 @@ def record_static_multiclass_preparation_decisions(
     report.raise_if_invalid()
     return report
 
+
+def record_static_continuous_regression_preparation_decisions(
+    *,
+    available_fields: Sequence[object],
+    target: str,
+    candidate_features: Sequence[object],
+    identifiers: Sequence[object] | None,
+    duplicate_report: object,
+    target_report: object,
+    numerical_report: object,
+    feature_relationship_report: object,
+    regression_structure_report: object,
+    leakage_report: object,
+    quality_report: object,
+    exploratory_insights_report: object,
+    source_type_resolutions: Mapping[str, Mapping[str, object]] | None = None,
+    train_fraction: float = 0.70,
+    validation_fraction: float = 0.15,
+    test_fraction: float = 0.15,
+    random_seed: int = 42,
+) -> PreparationDecisionReport:
+    """Build a traceable preparation plan for a static continuous-regression snapshot.
+
+    The function records decisions only. It never mutates source values, splits
+    observations, fits transformers, engineers nonlinear terms, selects
+    features, or trains a model. Dataset-specific source-type resolutions are
+    explicit inputs because source metadata can disagree with released numeric
+    values without making those observations invalid.
+    """
+    fields = _unique_text_tuple(available_fields)
+    features = _unique_text_tuple(candidate_features)
+    id_columns = _unique_text_tuple(identifiers or ())
+    target_name = _text(target)
+
+    if not target_name or target_name not in set(fields):
+        raise PreparationDecisionContractError(
+            f"Target {target_name!r} is not available for preparation."
+        )
+    if not features:
+        raise PreparationDecisionContractError(
+            "At least one candidate feature is required."
+        )
+    unknown_features = tuple(value for value in features if value not in set(fields))
+    if unknown_features:
+        raise PreparationDecisionContractError(
+            f"Candidate features are not available: {unknown_features!r}."
+        )
+    unknown_ids = tuple(value for value in id_columns if value not in set(fields))
+    if unknown_ids:
+        raise PreparationDecisionContractError(
+            f"Identifier fields are not available: {unknown_ids!r}."
+        )
+    if target_name in set(features):
+        raise PreparationDecisionContractError(
+            "The target cannot be included in candidate_features."
+        )
+
+    if not bool(getattr(quality_report, "is_structurally_valid", False)):
+        raise PreparationDecisionContractError(
+            "The initial data-quality report must be structurally valid."
+        )
+    if bool(getattr(quality_report, "has_external_blockers", False)):
+        raise PreparationDecisionContractError(
+            "External data-quality blockers must be resolved before preparation planning."
+        )
+    if not bool(
+        getattr(
+            exploratory_insights_report,
+            "is_ready_for_preparation_decisions",
+            False,
+        )
+    ):
+        raise PreparationDecisionContractError(
+            "Exploratory insights are not ready to inform preparation decisions."
+        )
+
+    if bool(getattr(target_report, "has_missing_values", True)):
+        raise PreparationDecisionContractError(
+            "Continuous target missing values must be resolved before preparation planning."
+        )
+    if bool(getattr(target_report, "has_non_finite_values", True)):
+        raise PreparationDecisionContractError(
+            "Continuous target non-finite values must be resolved before preparation planning."
+        )
+    if not bool(getattr(target_report, "has_variation", False)):
+        raise PreparationDecisionContractError(
+            "Continuous target must contain more than one finite value."
+        )
+    if bool(getattr(leakage_report, "has_direct_target_leakage", True)):
+        raise PreparationDecisionContractError(
+            "Direct target leakage must be resolved before preparation decisions are recorded."
+        )
+
+    raw_resolutions = dict(source_type_resolutions or {})
+    resolutions: dict[str, dict[str, str]] = {}
+    required_resolution_keys = (
+        "source_declared_type",
+        "effective_analytical_type",
+        "operation",
+        "rationale",
+    )
+    for raw_field, raw_resolution in raw_resolutions.items():
+        field = _text(raw_field)
+        if not field or field not in set(fields):
+            raise PreparationDecisionContractError(
+                f"Source-type resolution field {field!r} is not available."
+            )
+        if not isinstance(raw_resolution, Mapping):
+            raise PreparationDecisionContractError(
+                f"Source-type resolution for {field!r} must be a mapping."
+            )
+        normalized = {
+            key: _text(raw_resolution.get(key))
+            for key in required_resolution_keys
+        }
+        missing_keys = tuple(
+            key for key, value in normalized.items() if not value
+        )
+        if missing_keys:
+            raise PreparationDecisionContractError(
+                f"Source-type resolution for {field!r} is incomplete: "
+                f"{missing_keys!r}."
+            )
+        resolutions[field] = normalized
+
+    findings_method = getattr(quality_report, "findings_frame", None)
+    if not callable(findings_method):
+        raise PreparationDecisionContractError(
+            "The initial data-quality report must expose findings_frame()."
+        )
+    findings = findings_method()
+    if not isinstance(findings, pd.DataFrame):
+        raise PreparationDecisionContractError(
+            "quality_report.findings_frame() must return a pandas DataFrame."
+        )
+
+    must_fix = pd.DataFrame()
+    if not findings.empty and "Disposition" in findings.columns:
+        must_fix = findings.loc[findings["Disposition"].eq("Must fix")].copy()
+
+    unresolved_fields: set[str] = set()
+    unresolved_items: list[str] = []
+    if not must_fix.empty:
+        for _, row in must_fix.iterrows():
+            affected = _tuple_values(row.get("Affected fields", ()))
+            if not affected:
+                unresolved_items.append(_text(row.get("Finding ID")) or "<unknown>")
+                continue
+            for field in affected:
+                if field not in resolutions:
+                    unresolved_fields.add(field)
+
+    if unresolved_fields or unresolved_items:
+        details: list[str] = []
+        if unresolved_fields:
+            details.append(
+                "unresolved fields=" + repr(tuple(sorted(unresolved_fields)))
+            )
+        if unresolved_items:
+            details.append(
+                "unresolved findings=" + repr(tuple(unresolved_items))
+            )
+        raise PreparationDecisionContractError(
+            "Deterministic must-fix data-quality actions require explicit "
+            "source-type resolutions: " + "; ".join(details)
+        )
+
+    dependency_frame = leakage_report.dependency_frame()
+    if dependency_frame.empty:
+        unconfirmed_dependencies: tuple[str, ...] = ()
+    else:
+        mask = dependency_frame["Dependency status"].eq(
+            "Declared dependency not confirmed"
+        )
+        unconfirmed_dependencies = tuple(
+            str(value)
+            for value in dependency_frame.loc[mask, "Derived feature"]
+        )
+
+    redundancy_count = 0
+    numerical_relationships = getattr(
+        feature_relationship_report,
+        "numerical_relationships",
+        pd.DataFrame(),
+    )
+    if (
+        isinstance(numerical_relationships, pd.DataFrame)
+        and not numerical_relationships.empty
+        and "Potential redundancy" in numerical_relationships.columns
+    ):
+        redundancy_count = int(
+            numerical_relationships["Potential redundancy"].fillna(False).sum()
+        )
+
+    exact_duplicate_groups = int(
+        getattr(duplicate_report, "exact_duplicate_group_count", 0)
+    )
+    exact_duplicate_rows = int(
+        getattr(duplicate_report, "exact_duplicate_row_count", 0)
+    )
+    repeated_profile_groups = int(
+        getattr(duplicate_report, "repeated_profile_group_count", 0)
+    )
+    conflicting_profile_groups = int(
+        getattr(duplicate_report, "target_conflict_group_count", 0)
+    )
+    has_source_identifiers = bool(
+        getattr(duplicate_report, "has_source_identifiers", False)
+    )
+    outlier_features = tuple(
+        str(value)
+        for value in getattr(numerical_report, "features_with_outliers", ())
+    )
+
+    nonlinearity_frame = getattr(
+        regression_structure_report,
+        "nonlinearity",
+        pd.DataFrame(),
+    )
+    interaction_frame = getattr(
+        regression_structure_report,
+        "interactions",
+        pd.DataFrame(),
+    )
+    nonlinearity_count = (
+        int(nonlinearity_frame["Nonlinearity signal"].fillna(False).sum())
+        if isinstance(nonlinearity_frame, pd.DataFrame)
+        and not nonlinearity_frame.empty
+        and "Nonlinearity signal" in nonlinearity_frame.columns
+        else 0
+    )
+    interaction_count = (
+        int(interaction_frame["Interaction signal"].fillna(False).sum())
+        if isinstance(interaction_frame, pd.DataFrame)
+        and not interaction_frame.empty
+        and "Interaction signal" in interaction_frame.columns
+        else 0
+    )
+
+    def decision(
+        decision_id: str,
+        domain: str,
+        title: str,
+        affected_fields: Sequence[object],
+        status: str,
+        phase: str,
+        fit_scope: str,
+        operation: str,
+        rationale: str,
+        acceptance_criteria: str,
+        source_stages: Sequence[object],
+        prerequisites: Sequence[object] = (),
+    ) -> dict[str, object]:
+        return {
+            "decision_id": decision_id,
+            "domain": domain,
+            "title": title,
+            "affected_fields": tuple(affected_fields),
+            "status": status,
+            "phase": phase,
+            "fit_scope": fit_scope,
+            "operation": operation,
+            "rationale": rationale,
+            "prerequisites": tuple(prerequisites),
+            "acceptance_criteria": acceptance_criteria,
+            "source_stages": tuple(str(value) for value in source_stages),
+        }
+
+    decisions: list[dict[str, object]] = []
+
+    if resolutions:
+        resolution_fields = tuple(resolutions)
+        resolution_operations = "; ".join(
+            f"{field}: {resolutions[field]['operation']}"
+            for field in resolution_fields
+        )
+        resolution_rationales = "; ".join(
+            f"{field}: {resolutions[field]['rationale']}"
+            for field in resolution_fields
+        )
+        decisions.append(
+            decision(
+                "PREP-001",
+                "Cleaning",
+                "Resolve source-type metadata conflicts without altering released values",
+                resolution_fields,
+                "Approved",
+                "Before split",
+                "Deterministic",
+                resolution_operations,
+                resolution_rationales,
+                (
+                    "Every declared source-type conflict has an explicit effective "
+                    "analytical type and the released numerical values are preserved "
+                    "without rounding, truncation, deletion, or imputation."
+                ),
+                ("7", "8", "16", "17"),
+            )
+        )
+
+    preserve_prerequisites = ("PREP-001",) if resolutions else ()
+    decisions.extend(
+        [
+            decision(
+                "PREP-002",
+                "Cleaning",
+                "Preserve the validated source observations",
+                fields,
+                "Approved",
+                "Before split",
+                "Deterministic",
+                (
+                    "Create a defensive prepared copy that preserves row count and "
+                    "released numerical values while applying only the explicitly "
+                    "declared analytical-type interpretation."
+                ),
+                (
+                    "No missing, non-finite, domain-invalid, or leakage-derived value "
+                    "requires source-row mutation after the declared metadata resolution."
+                ),
+                (
+                    "Prepared row count and numerical values match the validated source "
+                    "before any split or learned transformation."
+                ),
+                ("7", "8", "15", "16"),
+                preserve_prerequisites,
+            ),
+            decision(
+                "PREP-003",
+                "Cleaning",
+                "Prohibit unsupported deduplication and generic outlier treatment",
+                fields,
+                "Prohibited",
+                "Before split",
+                "None",
+                (
+                    "Do not drop exact row matches without independent source identity "
+                    "evidence; do not delete, clip, winsorize, or replace values solely "
+                    "because they are IQR or target-extreme candidates."
+                ),
+                (
+                    "The source provides no observation identifier, repeated profiles "
+                    "can represent valid measurements, and audited extremes remain "
+                    "within the declared physical/domain constraints."
+                ),
+                (
+                    "No row or value is altered by equality-only deduplication or a "
+                    "generic statistical-extreme rule."
+                ),
+                ("9", "10", "11", "16", "17"),
+            ),
+            decision(
+                "PREP-004",
+                "Target governance",
+                "Preserve the continuous target on its original measurement scale",
+                (target_name,),
+                "Approved",
+                "Before split",
+                "None",
+                (
+                    "Keep the regression target numeric and continuous in its released "
+                    "measurement scale; do not discretize it into classes or use it as "
+                    "a predictor."
+                ),
+                (
+                    "The analytical contract is continuous regression and downstream "
+                    "errors must remain interpretable on the original target scale."
+                ),
+                (
+                    "Prepared y preserves the released numeric target values and X "
+                    "never contains the target or a direct target derivative."
+                ),
+                ("5", "10", "15", "17"),
+            ),
+            decision(
+                "PREP-005",
+                "Feature role",
+                "Use the complete validated candidate-feature set as the baseline",
+                features,
+                "Approved",
+                "Before split",
+                "None",
+                (
+                    "Start downstream regression evaluation with all validated "
+                    "candidate features in their released numerical representation."
+                ),
+                (
+                    "Exploratory association, redundancy, curvature, and interaction "
+                    "signals do not justify global feature deletion during preparation."
+                ),
+                "Baseline X contains exactly the declared candidate features.",
+                ("6", "12", "13", "14", "15", "17"),
+            ),
+            decision(
+                "PREP-006",
+                "Dataset splitting",
+                "Use a reproducible non-stratified snapshot split",
+                (target_name,),
+                "Approved",
+                "Split",
+                "None",
+                (
+                    f"Partition the validated snapshot into {train_fraction:.0%} train, "
+                    f"{validation_fraction:.0%} validation, and {test_fraction:.0%} test "
+                    f"with random seed {random_seed}, without discretizing the continuous "
+                    "target solely to manufacture stratification bins."
+                ),
+                (
+                    "The analytical table has no chronological evaluation field and the "
+                    "continuous target has no natural class labels for direct stratification."
+                ),
+                (
+                    "Partitions are reproducible and disjoint; the final test holdout "
+                    "remains untouched, and per-partition target summaries are reported "
+                    "descriptively without seed shopping."
+                ),
+                ("10", "15", "17"),
+                ("PREP-002", "PREP-004"),
+            ),
+            decision(
+                "PREP-007",
+                "Transformation",
+                "Make numerical scaling model-dependent and train-fitted",
+                features,
+                "Conditional",
+                "Train-only transformation",
+                "Train only",
+                (
+                    "Preserve released numerical values and fit scaling only inside "
+                    "candidate pipelines whose regression family requires or benefits "
+                    "from it."
+                ),
+                (
+                    "All predictors are numerical, but sensitivity to feature scale "
+                    "depends on the candidate regression family."
+                ),
+                (
+                    "Any scaler is fitted on training data only; validation and test "
+                    "are transform-only and never refit preprocessing."
+                ),
+                ("7", "11", "15", "17"),
+                ("PREP-006",),
+            ),
+            decision(
+                "PREP-008",
+                "Feature engineering",
+                "Defer nonlinear and interaction representation to model selection",
+                features,
+                "Deferred",
+                "Model selection",
+                "Evaluation only",
+                (
+                    "Compare a transparent additive baseline with candidate families "
+                    "or pipeline terms capable of representing nonlinear effects and "
+                    "interactions using training/validation evidence only."
+                ),
+                (
+                    f"Exploration flagged {nonlinearity_count} nonlinearity signal(s) "
+                    f"and {interaction_count} interaction signal(s), but the diagnostics "
+                    "are in-sample and do not establish generalization benefit."
+                ),
+                (
+                    "Nonlinear or interaction-aware alternatives are adopted only when "
+                    "leakage-safe validation improves the declared regression objectives."
+                ),
+                ("14", "17"),
+                ("PREP-005", "PREP-006"),
+            ),
+            decision(
+                "PREP-009",
+                "Feature engineering",
+                "Carry repeated-profile ambiguity into model-evaluation sensitivity checks",
+                features + (target_name,),
+                "Deferred",
+                "Model selection",
+                "Evaluation only",
+                (
+                    "Preserve repeated observations in the baseline and quantify whether "
+                    "repeated candidate-feature profiles materially affect validation "
+                    "error or residual interpretation."
+                ),
+                (
+                    f"Exploration found {repeated_profile_groups} repeated feature-profile "
+                    f"group(s), including {conflicting_profile_groups} group(s) with "
+                    "different continuous target values."
+                ),
+                (
+                    "Any repeated-profile sensitivity analysis is reported separately "
+                    "and does not rewrite the official source distribution."
+                ),
+                ("9", "16", "17"),
+                ("PREP-003", "PREP-006"),
+            ),
+            decision(
+                "PREP-010",
+                "Leakage governance",
+                "Split before every learned target-aware or distribution-aware operation",
+                features + (target_name,),
+                "Approved",
+                "Split",
+                "None",
+                (
+                    "Perform the approved split before fitting scalers, selectors, "
+                    "target transformations, feature engineering, or model parameters."
+                ),
+                "Held-out partitions must not influence learned preparation choices.",
+                (
+                    "All learned operations record train-only fit scope and the final "
+                    "test partition is used only after the modeling contract is frozen."
+                ),
+                ("15", "17"),
+                ("PREP-006",),
+            ),
+        ]
+    )
+
+    if redundancy_count > 0 or unconfirmed_dependencies:
+        affected = tuple(
+            dict.fromkeys(
+                list(features)
+                + list(unconfirmed_dependencies)
+            )
+        )
+        decisions.append(
+            decision(
+                "PREP-011",
+                "Feature engineering",
+                "Keep redundancy and unconfirmed dependencies inside leakage-safe ablation",
+                affected,
+                "Deferred",
+                "Model selection",
+                "Evaluation only",
+                (
+                    "Retain all affected features in the baseline and compare any "
+                    "reduced representation using training/validation evidence only."
+                ),
+                (
+                    f"{redundancy_count} redundancy review candidate(s) and "
+                    f"{len(unconfirmed_dependencies)} unconfirmed dependency claim(s) "
+                    "require validation rather than global pruning."
+                ),
+                (
+                    "No feature is removed globally from EDA evidence; any reduced set "
+                    "must meet the declared validation objectives before adoption."
+                ),
+                ("12", "15", "17"),
+                ("PREP-005", "PREP-006"),
+            )
+        )
+
+    evidence_specs: dict[str, tuple[str, str, object, str]] = {}
+
+    if resolutions:
+        evidence_specs["PREP-001"] = (
+            "quality_report",
+            "source-type resolution",
+            {
+                "resolved_fields": tuple(resolutions),
+                "resolutions": deepcopy(resolutions),
+                "must_fix_findings": int(len(must_fix)),
+            },
+            "Explicit metadata interpretation resolves preparation blockers without mutating released values.",
+        )
+
+    evidence_specs.update(
+        {
+            "PREP-002": (
+                "quality_report",
+                "validated source preservation",
+                {
+                    "must_fix_findings": int(len(must_fix)),
+                    "external_blockers": bool(
+                        getattr(quality_report, "has_external_blockers", False)
+                    ),
+                },
+                "After explicit source-type resolution, no additional source-row mutation is authorized.",
+            ),
+            "PREP-003": (
+                "duplicate_report + numerical_report + target_report",
+                "review-only cleaning evidence",
+                {
+                    "source_identifiers_available": has_source_identifiers,
+                    "exact_duplicate_groups": exact_duplicate_groups,
+                    "exact_duplicate_rows": exact_duplicate_rows,
+                    "features_with_iqr_candidates": outlier_features,
+                    "target_extreme_count": int(getattr(target_report, "extreme_count", 0)),
+                },
+                "Equality and statistical extremeness do not independently prove invalid observations.",
+            ),
+            "PREP-004": (
+                "target_report",
+                "continuous target contract",
+                {
+                    "target": target_name,
+                    "unit": getattr(target_report, "unit", None),
+                    "finite_values": int(getattr(target_report, "finite_count", 0)),
+                    "unique_values": int(getattr(target_report, "unique_count", 0)),
+                    "observed_range": getattr(target_report, "observed_range", None),
+                },
+                "Regression evaluation must preserve the continuous outcome and original scale.",
+            ),
+            "PREP-005": (
+                "feature_relationship_report + leakage_report",
+                "baseline feature governance",
+                {
+                    "candidate_feature_count": len(features),
+                    "redundancy_candidates": redundancy_count,
+                    "confirmed_derived_dependencies": int(
+                        getattr(leakage_report, "confirmed_derived_dependency_count", 0)
+                    ),
+                },
+                "Exploratory structure requires validation, not global feature deletion during preparation.",
+            ),
+            "PREP-006": (
+                "target_report",
+                "continuous snapshot split contract",
+                {
+                    "target_unique_values": int(getattr(target_report, "unique_count", 0)),
+                    "stratification": None,
+                    "random_seed": random_seed,
+                },
+                "Use a fixed random snapshot split without manufacturing class labels from the target.",
+            ),
+            "PREP-007": (
+                "numerical_report",
+                "numerical predictor contract",
+                {"numerical_feature_count": len(features)},
+                "Scaling remains candidate-family dependent and train-fitted.",
+            ),
+            "PREP-008": (
+                "regression_structure_report",
+                "nonlinearity and interaction diagnostics",
+                {
+                    "nonlinearity_signals": nonlinearity_count,
+                    "interaction_signals": interaction_count,
+                },
+                "Structural signals motivate later comparison but do not select a model or engineered terms.",
+            ),
+            "PREP-009": (
+                "duplicate_report",
+                "repeated-profile ambiguity",
+                {
+                    "repeated_profile_groups": repeated_profile_groups,
+                    "target_conflict_groups": conflicting_profile_groups,
+                },
+                "Preserve repeated measurements and quantify their influence during validation.",
+            ),
+            "PREP-010": (
+                "leakage_report",
+                "target-isolation audit",
+                {
+                    "direct_target_leakage": bool(
+                        getattr(leakage_report, "has_direct_target_leakage", False)
+                    )
+                },
+                "Learned operations must never fit on held-out partitions.",
+            ),
+        }
+    )
+
+    if "PREP-011" in {str(item["decision_id"]) for item in decisions}:
+        evidence_specs["PREP-011"] = (
+            "feature_relationship_report + leakage_report",
+            "redundancy and dependency review",
+            {
+                "redundancy_candidates": redundancy_count,
+                "unconfirmed_dependencies": unconfirmed_dependencies,
+            },
+            "Ablation belongs inside model selection.",
+        )
+
+    evidence: list[dict[str, object]] = []
+    for index, item in enumerate(decisions, start=1):
+        decision_id = str(item["decision_id"])
+        source_report, source_item, observed_value, interpretation = evidence_specs[
+            decision_id
+        ]
+        evidence.append(
+            {
+                "evidence_id": f"PDE-{index:03d}",
+                "decision_id": decision_id,
+                "source_report": source_report,
+                "source_item": source_item,
+                "observed_value": observed_value,
+                "expected_or_reference": "Stage 18 continuous-regression preparation policy",
+                "interpretation": interpretation,
+            }
+        )
+
+    deferred_decision_ids = tuple(
+        str(item["decision_id"])
+        for item in decisions
+        if item["status"] == "Deferred"
+    )
+
+    before_split_ids = tuple(
+        decision_id
+        for decision_id in ("PREP-001", "PREP-002", "PREP-003", "PREP-004", "PREP-005")
+        if decision_id in {str(item["decision_id"]) for item in decisions}
+    )
+
+    execution_steps: list[dict[str, object]] = [
+        {
+            "step_id": "STEP-001",
+            "sequence": 1,
+            "decision_ids": before_split_ids,
+            "phase": "Before split",
+            "action": (
+                "Revalidate the raw table, apply only the declared source-type "
+                "interpretation, and create a value-preserving prepared projection."
+            ),
+            "blocking": True,
+            "status": "Planned",
+            "temporal_dependency": False,
+            "acceptance_criteria": (
+                "Source row count and numerical values are preserved and every "
+                "preparation-blocking metadata conflict has an explicit resolution."
+            ),
+        },
+        {
+            "step_id": "STEP-002",
+            "sequence": 2,
+            "decision_ids": ("PREP-006", "PREP-010"),
+            "phase": "Split",
+            "action": (
+                "Create reproducible non-stratified train, validation, and test "
+                "partitions and record target summaries without tuning the split."
+            ),
+            "blocking": True,
+            "status": "Planned",
+            "temporal_dependency": False,
+            "acceptance_criteria": (
+                "Partitions are disjoint, reproducible, preserve the final test "
+                "holdout, and use no artificial target-class bins."
+            ),
+        },
+        {
+            "step_id": "STEP-003",
+            "sequence": 3,
+            "decision_ids": ("PREP-007",),
+            "phase": "Train-only transformation",
+            "action": "Fit model-dependent numerical preprocessing on training data only.",
+            "blocking": True,
+            "status": "Planned",
+            "temporal_dependency": False,
+            "acceptance_criteria": (
+                "Validation and test are transform-only and no scaler is globally fitted."
+            ),
+        },
+        {
+            "step_id": "STEP-004",
+            "sequence": 4,
+            "decision_ids": deferred_decision_ids,
+            "phase": "Model selection",
+            "action": (
+                "Evaluate nonlinear structure, repeated-profile sensitivity, and any "
+                "ablation candidates without changing the baseline preparation handoff."
+            ),
+            "blocking": False,
+            "status": "Deferred",
+            "temporal_dependency": False,
+            "acceptance_criteria": (
+                "Alternatives are adopted only from leakage-safe training/validation evidence."
+            ),
+        },
+        {
+            "step_id": "STEP-005",
+            "sequence": 5,
+            "decision_ids": tuple(str(item["decision_id"]) for item in decisions),
+            "phase": "Model selection",
+            "action": (
+                "Freeze preprocessing, feature policy, target handling, and the "
+                "selected regression contract before final test evaluation."
+            ),
+            "blocking": True,
+            "status": "Deferred",
+            "temporal_dependency": False,
+            "acceptance_criteria": (
+                "Final test data are accessed only after all model-selection choices "
+                "and learned preparation choices are frozen."
+            ),
+        },
+    ]
+
+    def guardrail(
+        guardrail_id: str,
+        domain: str,
+        title: str,
+        affected_fields: Sequence[object],
+        severity: str,
+        prohibited_operation: str,
+        rationale: str,
+        verification: str,
+    ) -> dict[str, object]:
+        return {
+            "guardrail_id": guardrail_id,
+            "domain": domain,
+            "title": title,
+            "affected_fields": tuple(affected_fields),
+            "severity": severity,
+            "status": "Active",
+            "prohibited_operation": prohibited_operation,
+            "rationale": rationale,
+            "verification": verification,
+        }
+
+    guardrails_list: list[dict[str, object]] = [
+        guardrail(
+            "GRD-001",
+            "Cleaning",
+            "Preserve the raw evidence",
+            fields,
+            "Critical",
+            "Modify or overwrite the acquired raw table in place.",
+            "Reproducible preparation requires immutable source evidence.",
+            "Raw shape, values, index, and dtypes remain unchanged.",
+        )
+    ]
+    if resolutions:
+        guardrails_list.append(
+            guardrail(
+                "GRD-002",
+                "Cleaning",
+                "Do not coerce released decimals to satisfy source metadata",
+                tuple(resolutions),
+                "Critical",
+                "Round, truncate, or coerce released decimal measurements to integer.",
+                (
+                    "The explicit source-type resolution changes analytical "
+                    "interpretation, not released measurement values."
+                ),
+                "Prepared values remain numerically identical to the acquired source.",
+            )
+        )
+
+    guardrails_list.extend(
+        [
+            guardrail(
+                "GRD-003",
+                "Cleaning",
+                "Do not deduplicate from row equality alone",
+                fields,
+                "High",
+                "Drop exact matches without independent observation identity evidence.",
+                "The released table does not provide a source observation identifier.",
+                "No source row is removed solely because released values match another row.",
+            ),
+            guardrail(
+                "GRD-004",
+                "Cleaning",
+                "Do not apply generic outlier cleaning",
+                features + (target_name,),
+                "High",
+                "Delete, clip, winsorize, or replace values solely from an IQR flag.",
+                "IQR and target-extreme flags are descriptive, not validity rules.",
+                "The baseline prepared projection preserves every domain-valid numerical value.",
+            ),
+            guardrail(
+                "GRD-005",
+                "Target governance",
+                "Keep the continuous target outside predictors",
+                (target_name,),
+                "Critical",
+                "Include the target or a direct numerical derivative in X.",
+                "This would constitute direct target leakage.",
+                "Predictor matrices contain exactly candidate features and never the target.",
+            ),
+            guardrail(
+                "GRD-006",
+                "Target governance",
+                "Do not manufacture target classes for preparation",
+                (target_name,),
+                "High",
+                "Discretize the continuous target into bins as a replacement prediction target.",
+                "The declared problem is continuous regression on the original measurement scale.",
+                "Prepared y remains numeric, continuous, and unbinned.",
+            ),
+            guardrail(
+                "GRD-007",
+                "Leakage governance",
+                "Fit learned preprocessing on training only",
+                features,
+                "Critical",
+                (
+                    "Fit scaling, selection, target transformation, engineered terms, "
+                    "or other learned transformations before splitting or on held-out data."
+                ),
+                "Held-out data must not influence learned preparation parameters.",
+                "Every learned transformer records train-only fit scope.",
+            ),
+            guardrail(
+                "GRD-008",
+                "Feature engineering",
+                "Do not select features globally",
+                features,
+                "Critical",
+                (
+                    "Use full-data target associations, nonlinearity diagnostics, "
+                    "interaction diagnostics, or redundancy rankings to choose the final feature set."
+                ),
+                "Global selection would bias held-out evaluation.",
+                "Ablation and selection use training/validation evidence only.",
+            ),
+            guardrail(
+                "GRD-009",
+                "Dataset splitting",
+                "Protect the final test holdout",
+                (target_name,),
+                "Critical",
+                (
+                    "Use final-test metrics for model, feature, transformation, "
+                    "interaction, or hyperparameter selection."
+                ),
+                "Repeated test access converts the final holdout into validation data.",
+                "Final test evaluation occurs only after the analysis contract is frozen.",
+            ),
+        ]
+    )
+
+    split_policy = {
+        "train_fraction": train_fraction,
+        "validation_fraction": validation_fraction,
+        "test_fraction": test_fraction,
+        "stratify_by": None,
+        "random_seed": random_seed,
+        "shuffle": True,
+        "temporal_priority": True,
+        "temporal_policy_status": "Resolved snapshot fallback",
+        "random_split_fallback": (
+            "Approved for this source-released static continuous-regression snapshot: "
+            "no chronological observation field is available and no artificial target "
+            "bins are introduced solely for stratification."
+        ),
+        "test_holdout_untouched": True,
+        "disjoint_partitions_required": True,
+        "group_by_identifiers": id_columns,
+    }
+
+    report = record_preparation_decisions(
+        available_fields=fields,
+        decisions=decisions,
+        evidence=evidence,
+        execution_steps=execution_steps,
+        guardrails=guardrails_list,
+        split_policy=split_policy,
+    )
+    report.raise_if_invalid()
+    return report
+
+
 def _normalize_decisions(
     declarations: Sequence[Mapping[str, object]],
     *,
@@ -1911,15 +2861,16 @@ def _validate_split_policy(
             )
         )
 
-    stratify_by = _text(split_policy.get("stratify_by"))
-    if stratify_by not in set(available_fields):
+    raw_stratify_by = split_policy.get("stratify_by")
+    stratify_by = _text(raw_stratify_by)
+    if stratify_by and stratify_by not in set(available_fields):
         issues.append(
             _issue(
                 "Split policy",
                 "stratify_by",
                 "Unknown stratification field",
                 f"Stratification field {stratify_by!r} is not available",
-                "Class representation cannot be guaranteed",
+                "Requested stratification cannot be reproduced",
             )
         )
 
@@ -2023,7 +2974,11 @@ def _split_interpretation(
         "train_fraction": "Provisional share allocated to model fitting",
         "validation_fraction": "Provisional share reserved for model selection",
         "test_fraction": "Final holdout share reserved for one-time evaluation",
-        "stratify_by": "Field used to preserve class representation in random fallback",
+        "stratify_by": (
+            "No stratification is applied in the random fallback"
+            if not _text(value)
+            else "Field used to preserve representation in the random fallback"
+        ),
         "random_seed": "Seed used only for reproducible random fallback",
         "shuffle": "Random fallback shuffles rows before partitioning",
         "temporal_priority": "Chronological partitioning overrides random fallback when timing is valid",

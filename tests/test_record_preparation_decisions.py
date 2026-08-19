@@ -426,6 +426,13 @@ def test_stratification_field_must_exist() -> None:
         report.raise_if_invalid()
 
 
+def test_split_policy_allows_explicit_no_stratification() -> None:
+    report = _report(split_policy=_split_policy(stratify_by=None))
+
+    report.raise_if_invalid()
+    assert report.split_policy["stratify_by"] is None
+
+
 @pytest.mark.parametrize("seed", [42.0, "42", True, None])
 def test_random_seed_must_be_integer(seed: object) -> None:
     report = _report(split_policy=_split_policy(random_seed=seed))
@@ -565,6 +572,7 @@ def test_results_are_deterministic() -> None:
 from types import SimpleNamespace
 
 from scripts.record_preparation_decisions import (
+    record_static_continuous_regression_preparation_decisions,
     record_static_multiclass_preparation_decisions,
 )
 
@@ -724,5 +732,323 @@ def test_static_multiclass_plan_rejects_direct_target_leakage() -> None:
             target_classes=("A", "B", "C", "D", "E", "F", "G"),
             candidate_features=("Area", "Perimeter", "ShapeFactor1", "ShapeFactor2"),
             identifiers=(),
+            **reports,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Static continuous-regression preparation planning
+# ---------------------------------------------------------------------------
+
+
+def _static_continuous_reports(*, with_must_fix: bool = True):
+    dependency_frame = pd.DataFrame(
+        columns=["Derived feature", "Dependency status"]
+    )
+    leakage = SimpleNamespace(
+        has_direct_target_leakage=False,
+        confirmed_derived_dependency_count=0,
+        dependency_frame=lambda: dependency_frame.copy(deep=True),
+    )
+    duplicate = SimpleNamespace(
+        has_source_identifiers=False,
+        exact_duplicate_group_count=11,
+        exact_duplicate_row_count=36,
+        repeated_profile_group_count=19,
+        target_conflict_group_count=9,
+    )
+    target = SimpleNamespace(
+        has_missing_values=False,
+        has_non_finite_values=False,
+        has_variation=True,
+        finite_count=1030,
+        unique_count=845,
+        observed_range=80.27,
+        extreme_count=4,
+        unit="MPa",
+    )
+    numerical = SimpleNamespace(
+        features_with_outliers=("Water", "Superplasticizer", "Age"),
+    )
+    relationships = SimpleNamespace(
+        numerical_relationships=pd.DataFrame(
+            {"Potential redundancy": [False, False]}
+        ),
+    )
+    regression_structure = SimpleNamespace(
+        nonlinearity=pd.DataFrame(
+            {"Nonlinearity signal": [True, True, True, False]}
+        ),
+        interactions=pd.DataFrame(
+            {"Interaction signal": [True, True, True, True, False]}
+        ),
+    )
+    findings = pd.DataFrame(
+        [
+            {
+                "Finding ID": "DQ-001",
+                "Disposition": "Must fix" if with_must_fix else "Monitor",
+                "Affected fields": ("Blast Furnace Slag",),
+            },
+            {
+                "Finding ID": "DQ-002",
+                "Disposition": "Must fix" if with_must_fix else "Monitor",
+                "Affected fields": ("Blast Furnace Slag",),
+            },
+        ]
+    )
+    quality = SimpleNamespace(
+        is_structurally_valid=True,
+        has_must_fix_actions=with_must_fix,
+        has_external_blockers=False,
+        findings_frame=lambda: findings.copy(deep=True),
+    )
+    insights = SimpleNamespace(
+        is_ready_for_preparation_decisions=True,
+    )
+    return {
+        "duplicate_report": duplicate,
+        "target_report": target,
+        "numerical_report": numerical,
+        "feature_relationship_report": relationships,
+        "regression_structure_report": regression_structure,
+        "leakage_report": leakage,
+        "quality_report": quality,
+        "exploratory_insights_report": insights,
+    }
+
+
+def _slag_resolution():
+    return {
+        "Blast Furnace Slag": {
+            "source_declared_type": "Integer",
+            "effective_analytical_type": "Continuous numeric",
+            "operation": (
+                "Preserve released decimal values without rounding or "
+                "integer coercion."
+            ),
+            "rationale": (
+                "Released values contain valid decimal measurements that "
+                "conflict with the source metadata annotation."
+            ),
+        }
+    }
+
+
+def _static_continuous_report(**overrides: object):
+    reports = _static_continuous_reports()
+    reports.update(overrides)
+    return record_static_continuous_regression_preparation_decisions(
+        available_fields=(
+            "Cement",
+            "Blast Furnace Slag",
+            "Water",
+            "Age",
+            "Concrete compressive strength",
+        ),
+        target="Concrete compressive strength",
+        candidate_features=(
+            "Cement",
+            "Blast Furnace Slag",
+            "Water",
+            "Age",
+        ),
+        identifiers=(),
+        source_type_resolutions=_slag_resolution(),
+        train_fraction=0.70,
+        validation_fraction=0.15,
+        test_fraction=0.15,
+        random_seed=42,
+        **reports,
+    )
+
+
+def test_static_continuous_plan_is_structurally_valid_and_split_ready() -> None:
+    report = _static_continuous_report()
+
+    assert report.is_structurally_valid
+    assert report.is_ready_for_deterministic_preparation
+    assert report.is_ready_for_split_execution
+    assert not report.is_ready_for_modeling
+
+    report.raise_if_split_not_ready(require_stratification_contract=False)
+
+
+def test_static_continuous_plan_uses_non_stratified_snapshot_split() -> None:
+    report = _static_continuous_report()
+    policy = report.split_policy
+
+    assert policy["train_fraction"] == pytest.approx(0.70)
+    assert policy["validation_fraction"] == pytest.approx(0.15)
+    assert policy["test_fraction"] == pytest.approx(0.15)
+    assert policy["stratify_by"] is None
+    assert policy["random_seed"] == 42
+    assert policy["temporal_policy_status"] == "Resolved snapshot fallback"
+    assert policy["group_by_identifiers"] == ()
+
+    split_frame = report.split_policy_frame().set_index("Policy item")
+    assert split_frame.loc["Stratification field", "Status"] == "Resolved"
+    assert "No stratification" in split_frame.loc[
+        "Stratification field", "Interpretation"
+    ]
+
+
+def test_static_continuous_plan_resolves_source_type_without_value_coercion() -> None:
+    report = _static_continuous_report()
+    decisions = report.decisions_frame().set_index("Decision ID")
+    guardrails = report.guardrails_frame().set_index("Guardrail ID")
+
+    assert decisions.loc["PREP-001", "Status"] == "Approved"
+    assert decisions.loc["PREP-001", "Affected fields"] == (
+        "Blast Furnace Slag",
+    )
+    assert "preserv" in decisions.loc["PREP-001", "Operation"].lower()
+    assert "round" in guardrails.loc["GRD-002", "Prohibited operation"].lower()
+
+
+def test_static_continuous_plan_preserves_original_target_semantics() -> None:
+    report = _static_continuous_report()
+    decisions = report.decisions_frame().set_index("Decision ID")
+
+    assert decisions.loc["PREP-004", "Status"] == "Approved"
+    assert decisions.loc["PREP-004", "Affected fields"] == (
+        "Concrete compressive strength",
+    )
+    assert "continuous" in decisions.loc["PREP-004", "Operation"].lower()
+    assert "discretize" in decisions.loc["PREP-004", "Operation"].lower()
+
+
+def test_static_continuous_plan_defers_structure_and_repeat_sensitivity() -> None:
+    report = _static_continuous_report()
+    decisions = report.decisions_frame().set_index("Decision ID")
+
+    assert decisions.loc["PREP-008", "Status"] == "Deferred"
+    assert decisions.loc["PREP-009", "Status"] == "Deferred"
+    assert "3 nonlinearity" in decisions.loc["PREP-008", "Rationale"]
+    assert "4 interaction" in decisions.loc["PREP-008", "Rationale"]
+    assert "19 repeated feature-profile" in decisions.loc["PREP-009", "Rationale"]
+    assert "9 group(s)" in decisions.loc["PREP-009", "Rationale"]
+
+
+def test_static_continuous_plan_rejects_unresolved_must_fix_quality_field() -> None:
+    reports = _static_continuous_reports()
+
+    with pytest.raises(
+        PreparationDecisionContractError,
+        match="explicit source-type resolutions",
+    ):
+        record_static_continuous_regression_preparation_decisions(
+            available_fields=(
+                "Cement",
+                "Blast Furnace Slag",
+                "Water",
+                "Age",
+                "Concrete compressive strength",
+            ),
+            target="Concrete compressive strength",
+            candidate_features=(
+                "Cement",
+                "Blast Furnace Slag",
+                "Water",
+                "Age",
+            ),
+            identifiers=(),
+            source_type_resolutions={},
+            **reports,
+        )
+
+
+def test_static_continuous_plan_rejects_unknown_resolution_field() -> None:
+    reports = _static_continuous_reports()
+    bad_resolution = _slag_resolution()
+    bad_resolution["Unknown"] = bad_resolution.pop("Blast Furnace Slag")
+
+    with pytest.raises(
+        PreparationDecisionContractError,
+        match="is not available",
+    ):
+        record_static_continuous_regression_preparation_decisions(
+            available_fields=(
+                "Cement",
+                "Blast Furnace Slag",
+                "Water",
+                "Age",
+                "Concrete compressive strength",
+            ),
+            target="Concrete compressive strength",
+            candidate_features=(
+                "Cement",
+                "Blast Furnace Slag",
+                "Water",
+                "Age",
+            ),
+            identifiers=(),
+            source_type_resolutions=bad_resolution,
+            **reports,
+        )
+
+
+def test_static_continuous_plan_rejects_direct_target_leakage() -> None:
+    reports = _static_continuous_reports()
+    reports["leakage_report"] = SimpleNamespace(
+        has_direct_target_leakage=True,
+        confirmed_derived_dependency_count=0,
+        dependency_frame=lambda: pd.DataFrame(),
+    )
+
+    with pytest.raises(
+        PreparationDecisionContractError,
+        match="Direct target leakage",
+    ):
+        record_static_continuous_regression_preparation_decisions(
+            available_fields=(
+                "Cement",
+                "Blast Furnace Slag",
+                "Water",
+                "Age",
+                "Concrete compressive strength",
+            ),
+            target="Concrete compressive strength",
+            candidate_features=(
+                "Cement",
+                "Blast Furnace Slag",
+                "Water",
+                "Age",
+            ),
+            identifiers=(),
+            source_type_resolutions=_slag_resolution(),
+            **reports,
+        )
+
+
+def test_static_continuous_plan_rejects_constant_target() -> None:
+    reports = _static_continuous_reports()
+    reports["target_report"] = SimpleNamespace(
+        has_missing_values=False,
+        has_non_finite_values=False,
+        has_variation=False,
+    )
+
+    with pytest.raises(
+        PreparationDecisionContractError,
+        match="more than one finite value",
+    ):
+        record_static_continuous_regression_preparation_decisions(
+            available_fields=(
+                "Cement",
+                "Blast Furnace Slag",
+                "Water",
+                "Age",
+                "Concrete compressive strength",
+            ),
+            target="Concrete compressive strength",
+            candidate_features=(
+                "Cement",
+                "Blast Furnace Slag",
+                "Water",
+                "Age",
+            ),
+            identifiers=(),
+            source_type_resolutions=_slag_resolution(),
             **reports,
         )
