@@ -291,6 +291,49 @@ class ClassificationSplitPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class ContinuousRegressionSplitPolicy:
+    """Declarative non-stratified policy for a continuous-regression snapshot."""
+
+    evaluation_mode: str
+    purpose: str
+    train_fraction: float
+    validation_fraction: float
+    test_fraction: float
+    random_seed: int
+    shuffle: bool
+    stratify_by: None = None
+    educational_justification: str = ""
+    operational_validity: str = "unconfirmed"
+    temporal_contract_status: str = "resolved_static_snapshot"
+    feature_inference_availability: str = "unconfirmed"
+
+    @property
+    def second_stage_seed(self) -> int:
+        return self.random_seed + 1
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "problem_type": "continuous_regression",
+            "evaluation_mode": self.evaluation_mode,
+            "purpose": self.purpose,
+            "train_fraction": self.train_fraction,
+            "validation_fraction": self.validation_fraction,
+            "test_fraction": self.test_fraction,
+            "stratify_by": None,
+            "random_seed": self.random_seed,
+            "shuffle": self.shuffle,
+            "educational_justification": self.educational_justification,
+            "operational_validity": self.operational_validity,
+            "temporal_contract_status": self.temporal_contract_status,
+            "feature_inference_availability": self.feature_inference_availability,
+            "stage_seeds": {
+                "train_vs_temporary": self.random_seed,
+                "validation_vs_test": self.second_stage_seed,
+            },
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DatasetPartitions:
     """Defensive train, validation, and test DataFrame partitions."""
 
@@ -372,6 +415,37 @@ class PartitionValidationReport:
             "entity_disjointness_status": self.entity_disjointness_status,
             "checks": dict(self.checks),
             "prevalence_tolerance": self.prevalence_tolerance,
+            "valid": self.is_valid,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RegressionPartitionValidationReport:
+    """Partition integrity and descriptive continuous-target evidence."""
+
+    row_counts: tuple[tuple[str, int], ...]
+    target_diagnostics: tuple[tuple[str, Mapping[str, Any]], ...]
+    membership: tuple[tuple[str, tuple[str, ...]], ...]
+    checks: tuple[tuple[str, bool], ...]
+    membership_kind: str
+    membership_semantics: str
+    entity_disjointness_status: str
+
+    @property
+    def is_valid(self) -> bool:
+        return all(value for _, value in self.checks)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "row_counts": dict(self.row_counts),
+            "target_diagnostics": {
+                name: _copy_mapping(values) for name, values in self.target_diagnostics
+            },
+            "membership": {name: list(values) for name, values in self.membership},
+            "membership_kind": self.membership_kind,
+            "membership_semantics": self.membership_semantics,
+            "entity_disjointness_status": self.entity_disjointness_status,
+            "checks": dict(self.checks),
             "valid": self.is_valid,
         }
 
@@ -612,10 +686,51 @@ def validate_source_against_exploration_handoff(
             f"Source identity mismatch: target column {target_column!r} is absent."
         )
     observed_classes = tuple(pd.unique(frame[target_column]).tolist())
-    if set(observed_classes) != set(target_classes):
+    if problem_type == "multiclass_classification":
+        if set(observed_classes) != set(target_classes):
+            raise DatasetValidationError(
+                "Source identity mismatch for target classes: "
+                f"observed={observed_classes!r}, expected={target_classes!r}."
+            )
+    elif problem_type == "continuous_regression":
+        if target_classes:
+            raise DatasetValidationError(
+                "Continuous-regression handoff must declare empty target_classes."
+            )
+        if prediction_contract.get("positive_class") is not None:
+            raise DatasetValidationError(
+                "Continuous-regression handoff must not declare a positive class."
+            )
+        if prediction_contract.get("class_semantics") is not None:
+            raise DatasetValidationError(
+                "Continuous-regression handoff must not declare class semantics."
+            )
+        if prediction_contract.get("target_semantics") != "Continuous / quantitative":
+            raise DatasetValidationError("Continuous target semantics are inconsistent.")
+        if prediction_contract.get("target_unit") != "MPa":
+            raise DatasetValidationError("Continuous target unit is inconsistent.")
+        numeric_target = pd.to_numeric(frame[target_column], errors="coerce")
+        if not pandas_types.is_numeric_dtype(frame[target_column]):
+            raise DatasetValidationError("Continuous target must have a numeric dtype.")
+        if numeric_target.isna().any() or not numeric_target.map(math.isfinite).all():
+            raise DatasetValidationError("Continuous target must be complete and finite.")
+        decisions = handoff.get("preparation_contract", {}).get("decisions", [])
+        slag_resolution = [
+            item for item in decisions
+            if isinstance(item, Mapping)
+            and item.get("Decision ID") == "PREP-001"
+            and item.get("Status") == "Approved"
+            and item.get("Affected fields") == ["Blast Furnace Slag"]
+            and "Preserve released decimal values exactly" in str(item.get("Operation", ""))
+            and "do not round, truncate, or coerce" in str(item.get("Operation", ""))
+        ]
+        if len(slag_resolution) != 1:
+            raise DatasetValidationError(
+                "Required Blast Furnace Slag metadata resolution is absent or inconsistent."
+            )
+    else:
         raise DatasetValidationError(
-            "Source identity mismatch for target classes: "
-            f"observed={observed_classes!r}, expected={target_classes!r}."
+            f"Unexpected exploration problem type: {problem_type!r}."
         )
     if len(feature_columns) != int(feature_contract.get("baseline_feature_count", -1)):
         raise DatasetValidationError("Exploration handoff feature count is inconsistent.")
@@ -628,11 +743,7 @@ def validate_source_against_exploration_handoff(
             "Source identity mismatch: feature, identifier, and target roles do not "
             "cover the acquired schema."
         )
-    if problem_type != "multiclass_classification":
-        raise DatasetValidationError(
-            f"Unexpected exploration problem type: {problem_type!r}."
-        )
-    if prediction_contract.get("positive_class") is not None:
+    if problem_type == "multiclass_classification" and prediction_contract.get("positive_class") is not None:
         raise DatasetValidationError(
             "Multiclass exploration handoff must not declare a positive class."
         )
@@ -689,6 +800,15 @@ def validate_source_against_exploration_handoff(
             raise DatasetValidationError(
                 "Source identity mismatch for the UCI target-variable contract."
             )
+        if problem_type == "continuous_regression":
+            type_column = normalized_columns.get("type")
+            slag_rows = variables.loc[names.eq("Blast Furnace Slag")]
+            if type_column is None or len(slag_rows) != 1 or str(
+                slag_rows.iloc[0][type_column]
+            ).strip() != "Integer":
+                raise DatasetValidationError(
+                    "Blast Furnace Slag source-declared Integer provenance is missing."
+                )
         checks.append(("uci_variable_roles_match", True))
 
     return SourceIdentityReport(
@@ -793,6 +913,7 @@ def validate_raw_dataset(
     numeric_text_columns: Sequence[str] = (),
     allow_unexpected_columns: bool = False,
     require_all_expected_categories: bool = True,
+    problem_type: str = "classification",
 ) -> DatasetValidationReport:
     """Validate a raw dataset without mutating it."""
     _validate_contract_configuration(
@@ -842,26 +963,35 @@ def validate_raw_dataset(
             )
 
     expected_target = tuple(target_classes)
-    if not expected_target:
-        raise ValueError("target_classes cannot be empty.")
     target = frame[target_column]
     if target.isna().any():
         raise DatasetValidationError(
             f"Target column '{target_column}' contains missing values."
         )
     observed_target = tuple(pd.unique(target).tolist())
-    unexpected_target = [value for value in observed_target if value not in expected_target]
-    absent_target = [value for value in expected_target if value not in observed_target]
-    if unexpected_target:
-        raise DatasetValidationError(
-            f"Target column '{target_column}' contains unexpected classes: "
-            f"{unexpected_target}."
-        )
-    if absent_target:
-        raise DatasetValidationError(
-            f"Target column '{target_column}' is missing expected classes: "
-            f"{absent_target}."
-        )
+    if problem_type == "continuous_regression":
+        if expected_target:
+            raise ValueError("Continuous regression cannot declare target classes.")
+        if not pandas_types.is_numeric_dtype(target):
+            raise DatasetValidationError("Continuous target must have a numeric dtype.")
+        numeric_target = pd.to_numeric(target, errors="coerce")
+        if numeric_target.isna().any() or not numeric_target.map(math.isfinite).all():
+            raise DatasetValidationError("Continuous target must be complete and finite.")
+    else:
+        if not expected_target:
+            raise ValueError("target_classes cannot be empty.")
+        unexpected_target = [value for value in observed_target if value not in expected_target]
+        absent_target = [value for value in expected_target if value not in observed_target]
+        if unexpected_target:
+            raise DatasetValidationError(
+                f"Target column '{target_column}' contains unexpected classes: "
+                f"{unexpected_target}."
+            )
+        if absent_target:
+            raise DatasetValidationError(
+                f"Target column '{target_column}' is missing expected classes: "
+                f"{absent_target}."
+            )
 
     observed_categories: list[tuple[str, tuple[Any, ...]]] = []
     for column, expected_values in categorical_expected_values.items():
@@ -1050,6 +1180,7 @@ def validate_prepared_dataset(
     expected_row_count: int | None = None,
     expected_materialized_counts: Mapping[str, int] | None = None,
     observed_materialized_counts: Mapping[str, int] | None = None,
+    problem_type: str = "classification",
 ) -> DatasetValidationReport:
     """Validate prepared data and prove preservation of the raw projection."""
     raw = _copy_frame(raw_dataframe)
@@ -1101,6 +1232,7 @@ def validate_prepared_dataset(
         numeric_text_columns=(),
         allow_unexpected_columns=False,
         require_all_expected_categories=True,
+        problem_type=problem_type,
     )
     return DatasetValidationReport(
         stage="prepared",
@@ -1619,6 +1751,172 @@ def validate_dataset_partitions(
     )
 
 
+def validate_regression_split_policy(
+    policy: ContinuousRegressionSplitPolicy,
+) -> None:
+    """Validate a shuffled, reproducible policy that never uses the target."""
+    if policy.evaluation_mode != "shuffled_random_snapshot":
+        raise SplitPolicyError("Regression evaluation_mode must be shuffled_random_snapshot.")
+    if type(policy.random_seed) is not int:
+        raise SplitPolicyError("random_seed must be an integer.")
+    if policy.shuffle is not True or policy.stratify_by is not None:
+        raise SplitPolicyError("Regression snapshot must shuffle with stratify_by=None.")
+    fractions = (policy.train_fraction, policy.validation_fraction, policy.test_fraction)
+    if any(not isinstance(value, (int, float)) or value <= 0 or value >= 1 for value in fractions):
+        raise SplitPolicyError("Split fractions must be numeric values strictly between 0 and 1.")
+    if not math.isclose(sum(fractions), 1.0, rel_tol=0.0, abs_tol=1e-12):
+        raise SplitPolicyError("Split fractions must sum to 1.0.")
+    if policy.operational_validity != "unconfirmed":
+        raise SplitPolicyError("Operational validity must remain unconfirmed.")
+
+
+def split_continuous_regression_dataset(
+    dataframe: pd.DataFrame,
+    *,
+    policy: ContinuousRegressionSplitPolicy,
+    identifier_columns: Sequence[str] = (),
+) -> DatasetPartitions:
+    """Split source positions in two stages without consulting target values."""
+    frame = _copy_frame(dataframe)
+    validate_regression_split_policy(policy)
+    if frame.empty:
+        raise SplitPolicyError("Cannot split an empty dataset.")
+    for column in identifier_columns:
+        if column not in frame:
+            raise SplitPolicyError(f"Identifier column not found: {column}")
+    source_membership, membership_kind, membership_semantics = _membership_contract(
+        frame, identifier_columns
+    )
+    positions = list(range(len(frame)))
+    temporary_fraction = policy.validation_fraction + policy.test_fraction
+    train_positions, temporary_positions = train_test_split(
+        positions,
+        test_size=temporary_fraction,
+        random_state=policy.random_seed,
+        shuffle=True,
+        stratify=None,
+    )
+    relative_test_fraction = policy.test_fraction / temporary_fraction
+    validation_positions, test_positions = train_test_split(
+        temporary_positions,
+        test_size=relative_test_fraction,
+        random_state=policy.second_stage_seed,
+        shuffle=True,
+        stratify=None,
+    )
+
+    def project(selected: Sequence[int]) -> tuple[pd.DataFrame, tuple[str, ...]]:
+        stable = sorted(int(value) for value in selected)
+        return (
+            frame.iloc[stable].copy(deep=True),
+            tuple(source_membership[position] for position in stable),
+        )
+
+    train, train_membership = project(train_positions)
+    validation, validation_membership = project(validation_positions)
+    test, test_membership = project(test_positions)
+    return DatasetPartitions(
+        _train=train,
+        _validation=validation,
+        _test=test,
+        split_method="two_stage_sklearn_train_test_split_shuffled_non_stratified_source_positions",
+        rounding_method=(
+            "scikit-learn float test_size semantics: each held-out size is rounded "
+            "up with ceil; the remainder is assigned to the first set"
+        ),
+        _membership=(("train", train_membership), ("validation", validation_membership), ("test", test_membership)),
+        membership_kind=membership_kind,
+        membership_semantics=membership_semantics,
+    )
+
+
+def describe_continuous_target(series: pd.Series) -> dict[str, Any]:
+    """Return diagnostics only; callers must not use them to choose a split."""
+    if not pandas_types.is_numeric_dtype(series):
+        raise PartitionValidationError("Continuous target must have a numeric dtype.")
+    values = pd.to_numeric(series, errors="coerce")
+    if values.isna().any() or not values.map(math.isfinite).all():
+        raise PartitionValidationError("Continuous target must be complete and finite.")
+    quantiles = values.quantile([0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99])
+    return {
+        "count": int(values.count()),
+        "minimum": float(values.min()),
+        "maximum": float(values.max()),
+        "mean": float(values.mean()),
+        "median": float(values.median()),
+        "standard_deviation": float(values.std(ddof=1)),
+        "quantiles": {f"{int(q * 100)}%": float(value) for q, value in quantiles.items()},
+        "diagnostic_only": True,
+        "used_for_assignment_or_seed_selection": False,
+    }
+
+
+def validate_regression_partitions(
+    source_dataframe: pd.DataFrame,
+    partitions: DatasetPartitions,
+    *,
+    identifier_columns: Sequence[str],
+    target_column: str,
+) -> RegressionPartitionValidationReport:
+    """Prove schema, occurrence coverage, isolation, and finite continuous y."""
+    source = _copy_frame(source_dataframe)
+    if target_column not in source:
+        raise PartitionValidationError("Continuous target column is absent.")
+    describe_continuous_target(source[target_column])
+    source_membership, inferred_kind, inferred_semantics = _membership_contract(source, identifier_columns)
+    if partitions.membership_kind != inferred_kind:
+        raise PartitionValidationError("Partition membership kind conflicts with source.")
+    persisted = partitions.membership_mapping()
+    source_positions = {value: position for position, value in enumerate(source_membership)}
+    membership_sets: dict[str, set[str]] = {}
+    rows: list[tuple[str, int]] = []
+    diagnostics: list[tuple[str, Mapping[str, Any]]] = []
+    membership: list[tuple[str, tuple[str, ...]]] = []
+    for name, frame in partitions.as_mapping().items():
+        if frame.empty or tuple(frame.columns) != tuple(source.columns):
+            raise PartitionValidationError(f"Partition '{name}' is empty or has a schema mismatch.")
+        values = tuple(persisted.get(name, ()))
+        if len(values) != len(frame) or len(set(values)) != len(values):
+            raise PartitionValidationError(f"Partition '{name}' membership is invalid.")
+        if any(value not in source_positions for value in values):
+            raise PartitionValidationError(f"Partition '{name}' membership is outside source.")
+        if not identifier_columns:
+            expected_hashes = Counter(_row_hash_from_occurrence_key(value) for value in values)
+            if Counter(_row_content_fingerprints(frame)) != expected_hashes:
+                raise PartitionValidationError(f"Partition '{name}' row multiplicity mismatch.")
+        elif _source_identifier_membership_keys(frame, identifier_columns) != values:
+            raise PartitionValidationError(f"Partition '{name}' identifier membership mismatch.")
+        positions = [source_positions[value] for value in values]
+        if positions != sorted(positions):
+            raise PartitionValidationError(f"Partition '{name}' is not in stable source order.")
+        membership_sets[name] = set(values)
+        rows.append((name, len(frame)))
+        diagnostics.append((name, describe_continuous_target(frame[target_column])))
+        membership.append((name, values))
+    pairs = (("train", "validation"), ("train", "test"), ("validation", "test"))
+    if any(membership_sets[a] & membership_sets[b] for a, b in pairs):
+        raise PartitionValidationError("Partition membership overlaps were detected.")
+    if set().union(*membership_sets.values()) != set(source_membership):
+        raise PartitionValidationError("Partition coverage mismatch.")
+    if sum(dict(rows).values()) != len(source):
+        raise PartitionValidationError("Partition row counts do not cover source.")
+    checks = (
+        ("all_partitions_present", True), ("all_partitions_non_empty", True),
+        ("schema_and_column_order_preserved", True), ("continuous_target_complete_finite", True),
+        ("technical_occurrence_membership_disjoint", True), ("row_multiplicity_preserved", True),
+        ("partition_membership_isolated", True), ("full_coverage", True),
+        ("row_count_preserved", True), ("stable_source_order", True),
+        ("non_stratified_assignment", True), ("test_holdout_isolated", True),
+        ("entity_disjointness_not_claimed_without_source_identifiers", not bool(identifier_columns)),
+    )
+    return RegressionPartitionValidationReport(
+        row_counts=tuple(rows), target_diagnostics=tuple(diagnostics),
+        membership=tuple(membership), checks=checks,
+        membership_kind=inferred_kind, membership_semantics=inferred_semantics,
+        entity_disjointness_status=("validated_from_source_identifiers" if identifier_columns else "not_claimed_without_source_identifiers"),
+    )
+
+
 def analyze_repeated_profiles_across_partitions(
     source_dataframe: pd.DataFrame,
     partitions: DatasetPartitions,
@@ -1772,9 +2070,12 @@ def build_preparation_manifest(
     readiness: Mapping[str, Any],
     source_identity: Mapping[str, Any] | None = None,
     contract_version: str = CONTRACT_VERSION,
+    upstream_exploration: Mapping[str, Any] | None = None,
+    source_type_resolutions: Sequence[Mapping[str, Any]] = (),
+    runtime_version_evidence: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build a versioned preparation manifest."""
-    return {
+    payload = {
         "schema_version": "preparation-manifest.v1",
         "artifact_type": "preparation_manifest",
         "dataset_slug": dataset_slug,
@@ -1804,10 +2105,19 @@ def build_preparation_manifest(
             "logical_fingerprint_preserved": raw_fingerprint_before == raw_fingerprint_after,
             "source_sha256_preserved": source_sha256 == source_sha256_after,
         },
-        "runtime_versions": runtime_versions(),
+        "runtime_versions": _copy_mapping(
+            runtime_version_evidence
+            if runtime_version_evidence is not None
+            else runtime_versions()
+        ),
         "readiness": _copy_mapping(readiness),
         "source_identity_gate": _copy_mapping(source_identity or {}),
     }
+    if upstream_exploration is not None:
+        payload["upstream_exploration"] = _copy_mapping(upstream_exploration)
+    if source_type_resolutions:
+        payload["source_type_resolutions"] = copy.deepcopy(list(source_type_resolutions))
+    return payload
 
 
 def build_feature_manifest(
@@ -1827,6 +2137,8 @@ def build_feature_manifest(
     target_encoding: Mapping[Any, int] | None = None,
     problem_type: str | None = None,
     target_semantics: str | None = None,
+    target_unit: str | None = None,
+    prediction_output: str | None = None,
 ) -> dict[str, Any]:
     """Build an ordered feature and future-preprocessing contract."""
     features = tuple(feature_columns)
@@ -1834,8 +2146,11 @@ def build_feature_manifest(
     categorical = tuple(categorical_features)
     identifiers = tuple(identifier_columns)
     classes = tuple(target_classes)
-    if not classes:
+    is_regression = problem_type == "continuous_regression"
+    if not classes and not is_regression:
         raise ValueError("target_classes cannot be empty.")
+    if is_regression and classes:
+        raise ValueError("Continuous regression cannot declare target classes.")
     if set(numerical) & set(categorical):
         raise ValueError("Numerical and categorical feature roles overlap.")
     if set((*numerical, *categorical)) != set(features):
@@ -1849,12 +2164,12 @@ def build_feature_manifest(
         raise ValueError("Multiclass targets cannot declare a positive target class.")
     if resolved_problem_type == "binary_classification" and len(classes) != 2:
         raise ValueError("Binary classification requires exactly two target classes.")
-    encoding = (
+    encoding = {} if is_regression else (
         dict(target_encoding)
         if target_encoding is not None
         else {value: index for index, value in enumerate(classes)}
     )
-    if set(encoding) != set(classes) or set(encoding.values()) != set(range(len(classes))):
+    if not is_regression and (set(encoding) != set(classes) or set(encoding.values()) != set(range(len(classes)))):
         raise ValueError(
             "target_encoding must map every target class bijectively to 0..n-1."
         )
@@ -1864,9 +2179,14 @@ def build_feature_manifest(
         and len(classes) == 2
         and positive_target_class is not None
     )
+    if is_regression:
+        if positive_target_class is not None or target_encoding:
+            raise ValueError("Continuous regression cannot define classes or target encoding.")
+        if not target_semantics or not target_unit or not prediction_output:
+            raise ValueError("Continuous target semantics, unit, and prediction output are required.")
     payload = {
         "schema_version": (
-            "feature-manifest.v1" if legacy_binary else "feature-manifest.v2"
+            "feature-manifest.v1" if legacy_binary else ("feature-manifest.v3" if is_regression else "feature-manifest.v2")
         ),
         "artifact_type": "feature_manifest",
         "dataset_slug": dataset_slug,
@@ -1881,14 +2201,23 @@ def build_feature_manifest(
         "target_column": target_column,
         "target_classes": list(classes),
         "positive_target_class": positive_target_class,
-        "target_encoding_contract": {
-            str(key): value for key, value in encoding.items()
-        },
         "expected_dtypes": _copy_mapping(expected_dtypes),
         "preprocessing_contract": _copy_mapping(preprocessing_contract),
         "prohibited_predictors": list(prohibited_predictors),
     }
-    if not legacy_binary:
+    if not is_regression:
+        payload["target_encoding_contract"] = {str(key): value for key, value in encoding.items()}
+    else:
+        payload["problem_type"] = "continuous_regression"
+        payload["target_contract"] = {
+            "semantics": target_semantics,
+            "unit": target_unit,
+            "prediction_output": prediction_output,
+            "persisted_target": "continuous_numeric_original_scale",
+            "target_encoding": "not_applicable",
+            "target_transformed": False,
+        }
+    if not legacy_binary and not is_regression:
         payload["problem_type"] = resolved_problem_type
         payload["target_contract"] = {
             "semantics": target_semantics or "nominal_unordered",
@@ -1904,9 +2233,9 @@ def build_feature_manifest(
 def build_split_manifest(
     *,
     dataset_slug: str,
-    policy: ClassificationSplitPolicy,
+    policy: ClassificationSplitPolicy | ContinuousRegressionSplitPolicy,
     partitions: DatasetPartitions,
-    validation: PartitionValidationReport,
+    validation: PartitionValidationReport | RegressionPartitionValidationReport,
     partition_paths: Mapping[str, str | Path],
     partition_sha256: Mapping[str, str],
     repeated_profile_evidence: Mapping[str, Any] | None = None,
@@ -1917,11 +2246,12 @@ def build_split_manifest(
     if set(paths) != required or set(partition_sha256) != required:
         raise ValueError("Partition paths and fingerprints must cover train/validation/test.")
     report = validation.as_dict()
-    schema_version = (
+    is_regression = isinstance(validation, RegressionPartitionValidationReport)
+    schema_version = ("split-manifest.v3" if is_regression else (
         "split-manifest.v2"
         if report["membership_kind"] == "technical_row_occurrence"
         else "split-manifest.v1"
-    )
+    ))
     payload = {
         "schema_version": schema_version,
         "artifact_type": "split_manifest",
@@ -1932,14 +2262,11 @@ def build_split_manifest(
         "partition_paths": paths,
         "partition_sha256": dict(partition_sha256),
         "row_counts": report["row_counts"],
-        "class_counts": report["class_counts"],
-        "class_prevalence": report["class_prevalence"],
         "membership": report["membership"],
         "membership_kind": report["membership_kind"],
         "membership_semantics": report["membership_semantics"],
         "entity_disjointness_status": report["entity_disjointness_status"],
         "isolation_checks": report["checks"],
-        "prevalence_tolerance": report["prevalence_tolerance"],
         "test_holdout_policy": (
             "The test partition is isolated and must not be used for feature, "
             "preprocessing, model, hyperparameter, threshold, or metric selection."
@@ -1947,6 +2274,15 @@ def build_split_manifest(
         "operational_modeling_ready": False,
         "educational_model_selection_ready": True,
     }
+    if is_regression:
+        payload["target_diagnostics"] = report["target_diagnostics"]
+        payload["stratification"] = None
+        payload["target_bins_created"] = False
+        payload["seed_shopping_performed"] = False
+    else:
+        payload["class_counts"] = report["class_counts"]
+        payload["class_prevalence"] = report["class_prevalence"]
+        payload["prevalence_tolerance"] = report["prevalence_tolerance"]
     if repeated_profile_evidence is not None:
         payload["repeated_profile_evidence"] = _copy_mapping(
             repeated_profile_evidence
@@ -1959,12 +2295,13 @@ def build_quality_evidence(
     dataset_slug: str,
     raw_report: DatasetValidationReport,
     prepared_report: DatasetValidationReport,
-    partition_report: PartitionValidationReport,
+    partition_report: PartitionValidationReport | RegressionPartitionValidationReport,
     preparation: PreparedDataset,
     fingerprints: Mapping[str, Any],
     readiness: Mapping[str, Any],
     preservation_checks: Mapping[str, Any],
     repeated_profile_evidence: Mapping[str, Any] | None = None,
+    source_type_resolutions: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Build consolidated preparation quality evidence."""
     payload = {
@@ -1995,6 +2332,8 @@ def build_quality_evidence(
         payload["repeated_profile_evidence"] = _copy_mapping(
             repeated_profile_evidence
         )
+    if source_type_resolutions:
+        payload["source_type_resolutions"] = copy.deepcopy(list(source_type_resolutions))
     return payload
 
 
@@ -2004,6 +2343,7 @@ def build_preparation_handoff_manifest(
     component_paths: Mapping[str, str | Path],
     component_payloads: Mapping[str, Mapping[str, Any]],
     readiness: Mapping[str, Any],
+    upstream_exploration: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a non-circular integrity index for preparation JSON components."""
     required = {
@@ -2024,7 +2364,7 @@ def build_preparation_handoff_manifest(
         }
         for name in sorted(required)
     }
-    return {
+    payload = {
         "schema_version": "preparation-handoff.v1",
         "artifact_type": "preparation_handoff",
         "dataset_slug": dataset_slug,
@@ -2037,6 +2377,9 @@ def build_preparation_handoff_manifest(
             "test_partition_evaluated": False,
         },
     }
+    if upstream_exploration is not None:
+        payload["upstream_exploration"] = _copy_mapping(upstream_exploration)
+    return payload
 
 
 def _semantic_normalize(value: Any) -> Any:
@@ -2310,9 +2653,9 @@ def load_and_validate_preparation_handoff(
         "preparation": (preparation_manifest, {"preparation-manifest.v1"}),
         "feature": (
             feature_manifest,
-            {"feature-manifest.v1", "feature-manifest.v2"},
+            {"feature-manifest.v1", "feature-manifest.v2", "feature-manifest.v3"},
         ),
-        "split": (split_manifest, {"split-manifest.v1", "split-manifest.v2"}),
+        "split": (split_manifest, {"split-manifest.v1", "split-manifest.v2", "split-manifest.v3"}),
         "quality": (quality_evidence, {"quality-evidence.v1"}),
     }
     for name, (payload, expected) in expected_schemas.items():
@@ -2352,6 +2695,31 @@ def load_and_validate_preparation_handoff(
                 raise HandoffValidationError(
                     "Multiclass feature manifest cannot define a positive class."
                 )
+    elif feature_manifest.get("schema_version") == "feature-manifest.v3":
+        target_contract = feature_manifest.get("target_contract")
+        if feature_manifest.get("problem_type") != "continuous_regression":
+            raise HandoffValidationError("Continuous feature manifest problem_type is invalid.")
+        if feature_manifest.get("target_classes") != []:
+            raise HandoffValidationError("Continuous feature manifest cannot define classes.")
+        if feature_manifest.get("positive_target_class") is not None:
+            raise HandoffValidationError("Continuous feature manifest cannot define a positive class.")
+        if "target_encoding_contract" in feature_manifest:
+            raise HandoffValidationError("Continuous feature manifest cannot define target encoding.")
+        if not isinstance(target_contract, Mapping) or target_contract.get("semantics") != "Continuous / quantitative" or target_contract.get("unit") != "MPa":
+            raise HandoffValidationError("Continuous target contract is invalid.")
+
+    if handoff_manifest is not None and "upstream_exploration" in handoff_manifest:
+        upstream = handoff_manifest["upstream_exploration"]
+        if not isinstance(upstream, Mapping):
+            raise HandoffValidationError("Upstream exploration lineage is invalid.")
+        upstream_path = upstream.get("path")
+        upstream_sha = upstream.get("sha256")
+        if not isinstance(upstream_path, str) or not isinstance(upstream_sha, str):
+            raise HandoffValidationError("Upstream exploration lineage lacks path or SHA-256.")
+        if fingerprint_file(_resolve_project_artifact_path(root, upstream_path)) != upstream_sha:
+            raise HandoffValidationError("Upstream exploration fingerprint mismatch.")
+        if upstream.get("dataset_slug") != feature_manifest.get("dataset_slug"):
+            raise HandoffValidationError("Upstream exploration dataset_slug mismatch.")
             if target_contract.get("semantics") != "nominal_unordered":
                 raise HandoffValidationError(
                     "Multiclass target semantics must remain nominal and unordered."
@@ -2430,14 +2798,21 @@ def load_and_validate_preparation_handoff(
             )
         ),
     )
-    validate_dataset_partitions(
-        prepared,
-        partition_set,
-        identifier_columns=feature_manifest["identifier_columns"],
-        target_column=feature_manifest["target_column"],
-        target_classes=feature_manifest["target_classes"],
-        prevalence_tolerance=float(split_manifest.get("prevalence_tolerance", 0.02)),
-    )
+    if feature_manifest.get("problem_type") == "continuous_regression":
+        validate_regression_partitions(
+            prepared, partition_set,
+            identifier_columns=feature_manifest["identifier_columns"],
+            target_column=feature_manifest["target_column"],
+        )
+    else:
+        validate_dataset_partitions(
+            prepared,
+            partition_set,
+            identifier_columns=feature_manifest["identifier_columns"],
+            target_column=feature_manifest["target_column"],
+            target_classes=feature_manifest["target_classes"],
+            prevalence_tolerance=float(split_manifest.get("prevalence_tolerance", 0.02)),
+        )
 
     fingerprints = quality_evidence.get("fingerprint_checks", {})
     if isinstance(fingerprints, Mapping):
