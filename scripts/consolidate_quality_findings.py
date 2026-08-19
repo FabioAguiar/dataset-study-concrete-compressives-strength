@@ -751,6 +751,7 @@ def consolidate_initial_data_quality_from_reports(
     target_report: object,
     numerical_report: object,
     leakage_report: object,
+    problem_type: str | None = None,
 ) -> InitialDataQualityReport:
     """Consolidate previously computed quality reports without recomputation.
 
@@ -760,6 +761,23 @@ def consolidate_initial_data_quality_from_reports(
     preparation-decision stage can define them explicitly.
     """
     fields = tuple(str(value) for value in available_fields)
+    normalized_problem_type = (
+        str(problem_type).strip() if problem_type is not None else ""
+    )
+    supported_problem_types = {
+        "binary_classification",
+        "multiclass_classification",
+        "continuous_regression",
+    }
+    if normalized_problem_type and normalized_problem_type not in supported_problem_types:
+        raise ValueError(
+            "Unsupported problem_type for initial data-quality consolidation: "
+            f"{normalized_problem_type!r}."
+        )
+    is_continuous_regression = (
+        normalized_problem_type == "continuous_regression"
+    )
+
     findings: list[dict[str, object]] = []
     evidence: list[dict[str, object]] = []
     non_issues: list[dict[str, object]] = []
@@ -1096,7 +1114,7 @@ def consolidate_initial_data_quality_from_reports(
                         )
                     ),
                     "Review only",
-                    "The dataset does not provide source identifiers for grains.",
+                    "The dataset does not provide source identifiers for observations.",
                 ),
                 (
                     "duplicate_report",
@@ -1130,23 +1148,50 @@ def consolidate_initial_data_quality_from_reports(
         )
 
     if has_target_conflicts:
+        if is_continuous_regression:
+            conflict_title = (
+                "Identical feature profiles occur with different continuous target values"
+            )
+            conflict_action = (
+                "Retain the records and quantify their effect during regression "
+                "error and sensitivity analysis; do not average, relabel, or remove "
+                "them without source evidence."
+            )
+            conflict_verification = (
+                "Model evaluation documents whether repeated predictor profiles "
+                "contribute to irreducible conditional or measurement variability."
+            )
+            conflict_interpretation = (
+                "Identical predictors mapping to different numeric responses can "
+                "reflect unobserved factors, process variability, or measurement noise."
+            )
+        else:
+            conflict_title = (
+                "Identical feature profiles occur with different target classes"
+            )
+            conflict_action = (
+                "Retain the records and quantify their effect during multiclass "
+                "error analysis; do not relabel them without source evidence."
+            )
+            conflict_verification = (
+                "Model evaluation documents whether conflicting repeated profiles "
+                "contribute to irreducible classification ambiguity."
+            )
+            conflict_interpretation = (
+                "Identical predictors mapping to multiple classes are ambiguous."
+            )
+
         add_finding(
             finding_id="DQ-004",
             domain="Record ambiguity",
-            title="Identical feature profiles occur with different target classes",
+            title=conflict_title,
             severity="Medium",
             status="Review",
             disposition="Evaluate",
             blocking_scope="Model evaluation",
             source_stages=("9",),
-            required_action=(
-                "Retain the records and quantify their effect during multiclass "
-                "error analysis; do not relabel them without source evidence."
-            ),
-            verification=(
-                "Model evaluation documents whether conflicting repeated profiles "
-                "contribute to irreducible classification ambiguity."
-            ),
+            required_action=conflict_action,
+            verification=conflict_verification,
             evidence_rows=(
                 (
                     "duplicate_report",
@@ -1159,7 +1204,7 @@ def consolidate_initial_data_quality_from_reports(
                         )
                     ),
                     0,
-                    "Identical predictors mapping to multiple classes are ambiguous.",
+                    conflict_interpretation,
                 ),
                 (
                     "duplicate_report",
@@ -1177,97 +1222,201 @@ def consolidate_initial_data_quality_from_reports(
             ),
         )
 
-    # Stage 10: target integrity and class support.
+    # Stage 10: target integrity and distribution/support evidence.
     target_name = str(getattr(target_report, "target", ""))
     target_fields = (target_name,) if target_name in set(fields) else ()
-    if bool(getattr(target_report, "has_issues", False)):
-        add_finding(
-            finding_id="DQ-005",
-            domain="Target integrity",
-            title="Multiclass target contract is not satisfied",
-            affected_fields=target_fields,
-            severity="Critical",
-            status="Open",
-            disposition="Must fix",
-            blocking_scope="Modeling clearance",
-            source_stages=("10",),
-            required_action=(
-                "Resolve missing target values and any missing or unexpected "
-                "class labels before modeling."
-            ),
-            verification=(
-                "The target audit contains every declared class, no unexpected "
-                "class, and no missing target value."
-            ),
-            evidence_rows=(
-                (
-                    "target_report",
-                    "Missing target values",
-                    int(getattr(target_report, "missing_count", 0)),
-                    0,
-                    "Supervised rows require a valid multiclass label.",
-                ),
-                (
-                    "target_report",
-                    "Missing expected classes",
-                    len(
-                        getattr(
-                            target_report,
-                            "missing_expected_classes",
-                            (),
-                        )
-                    ),
-                    0,
-                    "Every declared class must be represented.",
-                ),
-                (
-                    "target_report",
-                    "Unexpected classes",
-                    len(getattr(target_report, "unexpected_classes", ())),
-                    0,
-                    "Observed labels must remain inside the target contract.",
-                ),
-            ),
+
+    if is_continuous_regression:
+        missing_count = int(getattr(target_report, "missing_count", 0))
+        non_finite_count = int(
+            getattr(target_report, "non_finite_count", 0)
         )
-    else:
+        finite_count = int(getattr(target_report, "finite_count", 0))
+        unique_count = int(getattr(target_report, "unique_count", 0))
+        has_variation = bool(getattr(target_report, "has_variation", False))
+        target_has_issues = (
+            missing_count > 0
+            or non_finite_count > 0
+            or finite_count == 0
+            or not has_variation
+        )
+
+        if target_has_issues:
+            add_finding(
+                finding_id="DQ-005",
+                domain="Target integrity",
+                title="Continuous regression target contract is not satisfied",
+                affected_fields=target_fields,
+                severity="Critical",
+                status="Open",
+                disposition="Must fix",
+                blocking_scope="Modeling clearance",
+                source_stages=("10",),
+                required_action=(
+                    "Resolve missing or non-finite target values and ensure the "
+                    "response retains meaningful numerical variation before modeling."
+                ),
+                verification=(
+                    "The target audit reports no missing or non-finite values, at "
+                    "least one finite observation, and more than one distinct finite "
+                    "target value."
+                ),
+                evidence_rows=(
+                    (
+                        "target_report",
+                        "Missing target values",
+                        missing_count,
+                        0,
+                        "Supervised regression rows require an observed response.",
+                    ),
+                    (
+                        "target_report",
+                        "Non-finite target values",
+                        non_finite_count,
+                        0,
+                        "Ordinary regression losses require finite response values.",
+                    ),
+                    (
+                        "target_report",
+                        "Distinct finite target values",
+                        unique_count,
+                        "> 1",
+                        "A continuous regression target must retain numerical variation.",
+                    ),
+                ),
+            )
+        else:
+            add_non_issue(
+                non_issue_id="NI-004",
+                domain="Target integrity",
+                title="The continuous regression target is complete, finite, and variable",
+                affected_fields=target_fields,
+                source_stages=("10",),
+                evidence_text=(
+                    f"Finite observations: {finite_count}; distinct finite target "
+                    f"values: {unique_count}; no missing or non-finite target values "
+                    "were reported."
+                ),
+                disposition="No action",
+                interpretation=(
+                    "Preserve the response on its original continuous numerical scale."
+                ),
+            )
+
+        extreme_count = int(getattr(target_report, "extreme_count", 0))
+        extreme_share = getattr(target_report, "extreme_share", None)
+        target_minimum = getattr(target_report, "minimum", None)
+        target_maximum = getattr(target_report, "maximum", None)
         add_non_issue(
-            non_issue_id="NI-004",
-            domain="Target integrity",
-            title="The multiclass target contract is complete and valid",
+            non_issue_id="NI-005",
+            domain="Target distribution",
+            title=(
+                "Target extremes are distributional evidence, not automatic invalid values"
+                if extreme_count > 0
+                else "No target values fall outside the configured descriptive fences"
+            ),
             affected_fields=target_fields,
             source_stages=("10",),
             evidence_text=(
-                f"Observed classes: {int(getattr(target_report, 'class_count', 0))}; "
-                "no missing or unexpected target values were reported."
+                f"Observed range: {target_minimum} to {target_maximum}; values outside "
+                f"1.5-IQR fences: {extreme_count}; share: "
+                f"{extreme_share if extreme_share is not None else 'not available'}."
             ),
-            disposition="No action",
-            interpretation="Preserve the readable nominal class labels.",
+            disposition="Preserve",
+            interpretation=(
+                "Do not clip, winsorize, remove, or transform target observations "
+                "solely because the exploratory Tukey rule marks them as extreme."
+            ),
         )
+    else:
+        if bool(getattr(target_report, "has_issues", False)):
+            add_finding(
+                finding_id="DQ-005",
+                domain="Target integrity",
+                title="Multiclass target contract is not satisfied",
+                affected_fields=target_fields,
+                severity="Critical",
+                status="Open",
+                disposition="Must fix",
+                blocking_scope="Modeling clearance",
+                source_stages=("10",),
+                required_action=(
+                    "Resolve missing target values and any missing or unexpected "
+                    "class labels before modeling."
+                ),
+                verification=(
+                    "The target audit contains every declared class, no unexpected "
+                    "class, and no missing target value."
+                ),
+                evidence_rows=(
+                    (
+                        "target_report",
+                        "Missing target values",
+                        int(getattr(target_report, "missing_count", 0)),
+                        0,
+                        "Supervised rows require a valid multiclass label.",
+                    ),
+                    (
+                        "target_report",
+                        "Missing expected classes",
+                        len(
+                            getattr(
+                                target_report,
+                                "missing_expected_classes",
+                                (),
+                            )
+                        ),
+                        0,
+                        "Every declared class must be represented.",
+                    ),
+                    (
+                        "target_report",
+                        "Unexpected classes",
+                        len(getattr(target_report, "unexpected_classes", ())),
+                        0,
+                        "Observed labels must remain inside the target contract.",
+                    ),
+                ),
+            )
+        else:
+            add_non_issue(
+                non_issue_id="NI-004",
+                domain="Target integrity",
+                title="The multiclass target contract is complete and valid",
+                affected_fields=target_fields,
+                source_stages=("10",),
+                evidence_text=(
+                    f"Observed classes: {int(getattr(target_report, 'class_count', 0))}; "
+                    "no missing or unexpected target values were reported."
+                ),
+                disposition="No action",
+                interpretation="Preserve the readable nominal class labels.",
+            )
 
-    imbalance_ratio = getattr(target_report, "imbalance_ratio", None)
-    normalized_entropy = getattr(
-        target_report,
-        "normalized_class_entropy",
-        None,
-    )
-    add_non_issue(
-        non_issue_id="NI-005",
-        domain="Target support",
-        title="Unequal class support is a modeling condition, not a data-quality defect",
-        affected_fields=target_fields,
-        source_stages=("10",),
-        evidence_text=(
-            "Majority-to-minority ratio="
-            f"{imbalance_ratio if imbalance_ratio is not None else 'not available'}; "
-            "normalized class entropy="
-            f"{normalized_entropy if normalized_entropy is not None else 'not available'}."
-        ),
-        disposition="Monitor",
-        interpretation=(
-            "Preserve all classes and carry class-support evidence into "
-            "stratified splitting and multiclass evaluation."
-        ),
-    )
+        imbalance_ratio = getattr(target_report, "imbalance_ratio", None)
+        normalized_entropy = getattr(
+            target_report,
+            "normalized_class_entropy",
+            None,
+        )
+        add_non_issue(
+            non_issue_id="NI-005",
+            domain="Target support",
+            title="Unequal class support is a modeling condition, not a data-quality defect",
+            affected_fields=target_fields,
+            source_stages=("10",),
+            evidence_text=(
+                "Majority-to-minority ratio="
+                f"{imbalance_ratio if imbalance_ratio is not None else 'not available'}; "
+                "normalized class entropy="
+                f"{normalized_entropy if normalized_entropy is not None else 'not available'}."
+            ),
+            disposition="Monitor",
+            interpretation=(
+                "Preserve all classes and carry class-support evidence into "
+                "stratified splitting and multiclass evaluation."
+            ),
+        )
 
     # Stage 11: statistical outlier candidates.
     outlier_features = tuple(
@@ -1468,6 +1617,24 @@ def consolidate_initial_data_quality_from_reports(
                     "do not remove derived features automatically during exploration."
                 ),
             )
+
+    elif is_continuous_regression:
+        add_non_issue(
+            non_issue_id="NI-008",
+            domain="Derived-feature provenance",
+            title="No source-documented retained derived-feature dependency is declared",
+            source_stages=("15",),
+            evidence_text=(
+                "The retained Concrete predictors are source-described as mixture "
+                "components and curing age; no retained mathematical dependency "
+                "is asserted by the study contract."
+            ),
+            disposition="No action",
+            interpretation=(
+                "Do not invent derived-feature dependencies from correlation or "
+                "regression structure alone."
+            ),
+        )
 
     return consolidate_initial_data_quality_findings(
         available_fields=fields,

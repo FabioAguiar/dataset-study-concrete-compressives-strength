@@ -738,3 +738,123 @@ def test_quality_overview_avoids_premature_modeling_clearance_language() -> None
         "Structural consolidation valid",
     ]
     assert "Modeling ready" not in set(overview["Metric"])
+
+
+def _continuous_source_backed_report_inputs(**overrides):
+    parameters = {
+        "problem_type": "continuous_regression",
+        "available_fields": ("Area", "Perimeter", "Strength"),
+        "target_report": SimpleNamespace(
+            target="Strength",
+            missing_count=0,
+            non_finite_count=0,
+            finite_count=100,
+            unique_count=87,
+            has_variation=True,
+            extreme_count=4,
+            extreme_share=0.04,
+            minimum=10.0,
+            maximum=80.0,
+        ),
+    }
+    parameters.update(overrides)
+    return _source_backed_report_inputs(**parameters)
+
+
+def test_continuous_report_driven_consolidation_uses_regression_target_semantics() -> None:
+    report = _continuous_source_backed_report_inputs()
+    non_issues = report.validated_non_issues_frame().set_index("Non-issue ID")
+
+    assert report.findings_frame().empty
+    assert (
+        non_issues.loc["NI-004", "Title"]
+        == "The continuous regression target is complete, finite, and variable"
+    )
+    assert non_issues.loc["NI-005", "Domain"] == "Target distribution"
+    assert "1.5-IQR" in non_issues.loc["NI-005", "Evidence"]
+
+
+def test_continuous_target_integrity_failure_is_blocking() -> None:
+    target_report = SimpleNamespace(
+        target="Strength",
+        missing_count=2,
+        non_finite_count=1,
+        finite_count=97,
+        unique_count=1,
+        has_variation=False,
+        extreme_count=0,
+        extreme_share=0.0,
+        minimum=30.0,
+        maximum=30.0,
+    )
+
+    report = _continuous_source_backed_report_inputs(target_report=target_report)
+    finding = report.findings_frame().set_index("Finding ID").loc["DQ-005"]
+    evidence = report.evidence_frame().loc[
+        lambda frame: frame["Finding ID"].eq("DQ-005")
+    ]
+
+    assert finding["Severity"] == "Critical"
+    assert finding["Disposition"] == "Must fix"
+    assert finding["Blocking scope"] == "Modeling clearance"
+    assert set(evidence["Source metric"]) == {
+        "Missing target values",
+        "Non-finite target values",
+        "Distinct finite target values",
+    }
+
+
+def test_continuous_repeated_profile_conflicts_use_regression_language() -> None:
+    duplicate_report = SimpleNamespace(
+        has_source_identifiers=False,
+        has_exact_duplicates=False,
+        has_duplicate_identifiers=False,
+        has_conflicting_identifiers=False,
+        has_target_conflicts=True,
+        identifier_columns=(),
+        exact_duplicate_group_count=0,
+        exact_duplicate_row_count=0,
+        duplicate_identifier_row_count=0,
+        conflicting_identifier_row_count=0,
+        target_conflict_group_count=3,
+        target_conflict_row_count=8,
+    )
+
+    report = _continuous_source_backed_report_inputs(
+        duplicate_report=duplicate_report,
+    )
+    finding = report.findings_frame().set_index("Finding ID").loc["DQ-004"]
+
+    assert "continuous target values" in finding["Title"]
+    assert "regression" in finding["Required action"]
+    assert "conditional or measurement variability" in finding["Verification"]
+
+
+def test_continuous_empty_dependency_declaration_is_a_validated_non_issue() -> None:
+    leakage_report = SimpleNamespace(
+        has_direct_target_leakage=False,
+        has_target_derived_dependencies=False,
+        candidate_features=("Area", "Perimeter"),
+        target_proxy_candidates_frame=lambda: pd.DataFrame(columns=["Field"]),
+        dependency_frame=lambda: pd.DataFrame(
+            columns=[
+                "Derived feature",
+                "Target-derived",
+                "Dependency status",
+            ]
+        ),
+    )
+
+    report = _continuous_source_backed_report_inputs(
+        leakage_report=leakage_report,
+    )
+    non_issues = report.validated_non_issues_frame().set_index("Non-issue ID")
+
+    assert "NI-008" in non_issues.index
+    assert non_issues.loc["NI-008", "Domain"] == "Derived-feature provenance"
+    assert "No source-documented" in non_issues.loc["NI-008", "Title"]
+
+
+def test_problem_type_validation_rejects_unsupported_values() -> None:
+    with pytest.raises(ValueError, match="Unsupported problem_type"):
+        _source_backed_report_inputs(problem_type="ordinal_regression")
