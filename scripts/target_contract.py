@@ -1,9 +1,9 @@
-"""Reusable validation and presentation of classification target contracts.
+"""Reusable validation and presentation of supervised target contracts.
 
-The notebook remains responsible for declaring study-specific semantics such as
-which column is the target and which labels are expected. This module performs
-non-mutating structural validation without analyzing class prevalence or
-encoding labels for modeling.
+The notebook remains responsible for declaring study-specific prediction
+semantics. This module performs non-mutating structural validation without
+analyzing target prevalence, distribution, range, or outliers and without
+encoding or transforming target values for modeling.
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ ClassificationProblemType = Literal[
     "multiclass_classification",
 ]
 
+ContinuousRegressionProblemType = Literal["continuous_regression"]
+
 _SUMMARY_COLUMNS: Final[list[str]] = [
     "Contract item",
     "Value",
@@ -35,7 +37,7 @@ _CLASS_COLUMNS: Final[list[str]] = [
 
 
 class TargetContractError(ValueError):
-    """Raised when a classification target contract is inconsistent."""
+    """Raised when a supervised target contract is inconsistent."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +122,174 @@ class ClassificationTargetContract:
             for class_value in self.expected_classes
         ]
         return pd.DataFrame(rows, columns=_CLASS_COLUMNS)
+
+
+@dataclass(frozen=True, slots=True)
+class ContinuousRegressionTargetContract:
+    """Validated, non-mutating continuous-regression target contract."""
+
+    target: str
+    problem_type: ContinuousRegressionProblemType
+    target_semantics: str
+    expected_unit: str | None
+    source_role: str | None
+    source_type: str | None
+    source_unit: str | None
+
+    @property
+    def prediction_output(self) -> str:
+        """Describe the expected prediction representation."""
+        return "Continuous numeric value on the original target scale"
+
+    def summary_frame(self) -> pd.DataFrame:
+        """Return the contract as a compact deterministic table."""
+        rows = [
+            {
+                "Contract item": "Problem type",
+                "Value": self.problem_type,
+                "Interpretation": "Supervised continuous regression task",
+            },
+            {
+                "Contract item": "Target column",
+                "Value": self.target,
+                "Interpretation": "Continuous outcome to be predicted",
+            },
+            {
+                "Contract item": "Target semantics",
+                "Value": self.target_semantics,
+                "Interpretation": "Quantitative target; not a class label",
+            },
+            {
+                "Contract item": "Prediction output",
+                "Value": self.prediction_output,
+                "Interpretation": "No thresholding or class decoding applies",
+            },
+            {
+                "Contract item": "Target unit",
+                "Value": self.expected_unit or self.source_unit or "Not declared",
+                "Interpretation": "Unit of the original prediction scale",
+            },
+            {
+                "Contract item": "Source variable role",
+                "Value": self.source_role or "Not checked",
+                "Interpretation": "Role declared by source metadata",
+            },
+            {
+                "Contract item": "Source variable type",
+                "Value": self.source_type or "Not checked",
+                "Interpretation": "Type declared by source metadata",
+            },
+            {
+                "Contract item": "Contract status",
+                "Value": "Valid",
+                "Interpretation": (
+                    "Target exists, is numeric, and matches declared metadata"
+                ),
+            },
+        ]
+        return pd.DataFrame(rows, columns=_SUMMARY_COLUMNS)
+
+
+def define_continuous_regression_target_contract(
+    dataframe: pd.DataFrame,
+    *,
+    target: str,
+    problem_type: ContinuousRegressionProblemType,
+    target_semantics: str = "Continuous / quantitative",
+    expected_unit: str | None = None,
+    expected_source_type: str | None = None,
+    source_variables_file: str | Path | None = None,
+) -> ContinuousRegressionTargetContract:
+    """Validate and return a continuous-regression target contract.
+
+    Distribution, range, missing-value prevalence, non-finite values, and
+    outliers are intentionally out of scope for this contract layer. Missing
+    values are ignored only while confirming that observed target values are
+    represented by a numeric pandas dtype.
+    """
+    if not isinstance(dataframe, pd.DataFrame):
+        raise TypeError("dataframe must be a pandas DataFrame.")
+
+    target_name = _normalize_text(target, field="target")
+    _require_unique_columns(dataframe)
+
+    if target_name not in dataframe.columns:
+        raise KeyError(f"Target column not found: {target_name!r}")
+
+    if problem_type != "continuous_regression":
+        raise TargetContractError(
+            "problem_type must be 'continuous_regression'."
+        )
+
+    semantics = _normalize_text(
+        target_semantics,
+        field="target_semantics",
+    )
+    normalized_expected_unit = _normalize_optional_text(
+        expected_unit,
+        field="expected_unit",
+    )
+    normalized_expected_source_type = _normalize_optional_text(
+        expected_source_type,
+        field="expected_source_type",
+    )
+
+    target_series = dataframe[target_name]
+    if pd.api.types.is_bool_dtype(target_series.dtype) or not (
+        pd.api.types.is_numeric_dtype(target_series.dtype)
+    ):
+        raise TargetContractError(
+            "continuous_regression requires a numeric target column; "
+            f"observed dtype={target_series.dtype!s}."
+        )
+
+    source_role = None
+    source_type = None
+    source_unit = None
+    if source_variables_file is not None:
+        source_metadata = _read_source_target_metadata(
+            source_variables_file,
+            target=target_name,
+        )
+        source_role = source_metadata["role"]
+        source_type = source_metadata["type"]
+        source_unit = source_metadata["unit"]
+
+        if source_role.lower() != "target":
+            raise TargetContractError(
+                f"Source metadata does not declare {target_name!r} as Target; "
+                f"observed role={source_role!r}."
+            )
+
+        if (
+            normalized_expected_source_type is not None
+            and source_type.lower() != normalized_expected_source_type.lower()
+        ):
+            raise TargetContractError(
+                "Source metadata target type does not match the declared "
+                f"contract: expected={normalized_expected_source_type!r}, "
+                f"observed={source_type!r}."
+            )
+
+        if (
+            normalized_expected_unit is not None
+            and source_unit.lower() != normalized_expected_unit.lower()
+        ):
+            raise TargetContractError(
+                "Source metadata target unit does not match the declared "
+                f"contract: expected={normalized_expected_unit!r}, "
+                f"observed={source_unit!r}."
+            )
+
+    return ContinuousRegressionTargetContract(
+        target=target_name,
+        problem_type=problem_type,
+        target_semantics=semantics,
+        expected_unit=normalized_expected_unit,
+        source_role=source_role,
+        source_type=source_type,
+        source_unit=source_unit,
+    )
 
 
 def define_classification_target_contract(
@@ -224,6 +394,24 @@ def _validate_source_target_role(
     *,
     target: str,
 ) -> str:
+    metadata = _read_source_target_metadata(
+        variables_file,
+        target=target,
+    )
+    role = metadata["role"]
+    if role.lower() != "target":
+        raise TargetContractError(
+            f"Source metadata does not declare {target!r} as Target; "
+            f"observed role={role!r}."
+        )
+    return role
+
+
+def _read_source_target_metadata(
+    variables_file: str | Path,
+    *,
+    target: str,
+) -> dict[str, str]:
     path = Path(variables_file)
     if not path.is_file():
         raise FileNotFoundError(
@@ -257,14 +445,19 @@ def _validate_source_target_role(
             f"{target!r}."
         )
 
-    role = str(matches.iloc[0][role_column]).strip()
-    if role.lower() != "target":
-        raise TargetContractError(
-            f"Source metadata does not declare {target!r} as Target; "
-            f"observed role={role!r}."
-        )
+    row = matches.iloc[0]
 
-    return role
+    def source_value(column_name: str) -> str:
+        source_column = normalized_columns.get(column_name)
+        if source_column is None or pd.isna(row[source_column]):
+            return ""
+        return str(row[source_column]).strip()
+
+    return {
+        "role": source_value("role"),
+        "type": source_value("type"),
+        "unit": source_value("units"),
+    }
 
 
 def _normalize_expected_classes(
@@ -301,6 +494,16 @@ def _normalize_text(value: object, *, field: str) -> str:
     if not normalized:
         raise TargetContractError(f"{field} must not be empty.")
     return normalized
+
+
+def _normalize_optional_text(
+    value: object | None,
+    *,
+    field: str,
+) -> str | None:
+    if value is None:
+        return None
+    return _normalize_text(value, field=field)
 
 
 def _require_unique_columns(dataframe: pd.DataFrame) -> None:
