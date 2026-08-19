@@ -867,3 +867,264 @@ def test_static_classification_audit_validates_tolerances() -> None:
             candidate_features=("Area",),
             confirmation_rate=1.1,
         )
+
+
+# ---------------------------------------------------------------------------
+# Static continuous-regression leakage audit
+# ---------------------------------------------------------------------------
+
+
+def _continuous_regression_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Cement": [120.0, 180.0, 240.0, 300.0, 360.0, 420.0],
+            "Water": [220.0, 205.0, 190.0, 175.0, 160.0, 145.0],
+            "Age": [7.0, 14.0, 28.0, 56.0, 90.0, 180.0],
+            "Concrete compressive strength": [
+                11.0,
+                18.5,
+                31.0,
+                44.0,
+                52.0,
+                61.5,
+            ],
+        }
+    )
+
+
+def test_static_continuous_regression_audit_accepts_primitive_inputs() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+    )
+
+    dataframe = _continuous_regression_frame()
+    report = analyze_static_continuous_regression_leakage(
+        dataframe,
+        target="Concrete compressive strength",
+        candidate_features=("Cement", "Water", "Age"),
+    )
+
+    assert report.is_structurally_valid
+    assert not report.has_direct_target_leakage
+    assert not report.has_target_proxy_candidates
+    assert report.dependency_frame().empty
+    assert report.summary_frame().set_index("Metric").loc[
+        "Declared derived dependencies", "Value"
+    ] == 0
+
+
+def test_static_continuous_regression_audit_detects_exact_target_copy() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+    )
+
+    dataframe = _continuous_regression_frame().assign(
+        proxy=lambda frame: frame["Concrete compressive strength"]
+    )
+    report = analyze_static_continuous_regression_leakage(
+        dataframe,
+        target="Concrete compressive strength",
+        candidate_features=("Cement", "proxy"),
+    )
+
+    proxy = report.target_proxy_candidates_frame().iloc[0]
+    assert proxy["Field"] == "proxy"
+    assert proxy["Detection method"] == "Exact numeric target copy"
+    assert proxy["Match rate"] == pytest.approx(1.0)
+    assert report.has_direct_target_leakage
+
+
+def test_static_continuous_regression_audit_detects_affine_target_transform() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+    )
+
+    dataframe = _continuous_regression_frame().assign(
+        proxy=lambda frame: frame["Concrete compressive strength"] * 145.0377377
+    )
+    report = analyze_static_continuous_regression_leakage(
+        dataframe,
+        target="Concrete compressive strength",
+        candidate_features=("Cement", "proxy"),
+    )
+
+    proxy = report.target_proxy_candidates_frame().iloc[0]
+    assert proxy["Field"] == "proxy"
+    assert proxy["Detection method"] == "Affine numeric target transform"
+    assert proxy["Slope"] == pytest.approx(145.0377377)
+    assert proxy["Match rate"] == pytest.approx(1.0)
+
+
+def test_static_continuous_regression_audit_does_not_call_nonlinear_signal_leakage() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+    )
+
+    dataframe = _continuous_regression_frame().assign(
+        nonlinear=lambda frame: frame["Concrete compressive strength"].pow(2)
+    )
+    report = analyze_static_continuous_regression_leakage(
+        dataframe,
+        target="Concrete compressive strength",
+        candidate_features=("nonlinear",),
+    )
+
+    assert report.target_proxy_candidates_frame().empty
+    assert not report.has_direct_target_leakage
+
+
+def test_static_continuous_regression_audit_rejects_target_as_candidate() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+    )
+
+    dataframe = _continuous_regression_frame()
+    report = analyze_static_continuous_regression_leakage(
+        dataframe,
+        target="Concrete compressive strength",
+        candidate_features=("Cement", "Concrete compressive strength"),
+    )
+
+    assert not report.is_structurally_valid
+    with pytest.raises(
+        DataLeakageAnalysisError,
+        match="Target included as candidate",
+    ):
+        report.raise_if_invalid()
+
+
+def test_static_continuous_regression_audit_rejects_missing_candidate() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+    )
+
+    report = analyze_static_continuous_regression_leakage(
+        _continuous_regression_frame(),
+        target="Concrete compressive strength",
+        candidate_features=("Cement", "missing"),
+    )
+
+    assert report.missing_candidate_features == ("missing",)
+    with pytest.raises(DataLeakageAnalysisError, match="Missing candidate feature"):
+        report.raise_if_invalid()
+
+
+def test_static_continuous_regression_audit_requires_numeric_varying_target() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+    )
+
+    nonnumeric = _continuous_regression_frame().copy()
+    nonnumeric["Concrete compressive strength"] = [
+        "low", "low", "medium", "medium", "high", "high"
+    ]
+    report = analyze_static_continuous_regression_leakage(
+        nonnumeric,
+        target="Concrete compressive strength",
+        candidate_features=("Cement",),
+    )
+    with pytest.raises(DataLeakageAnalysisError, match="Non-numeric target values"):
+        report.raise_if_invalid()
+
+    constant = _continuous_regression_frame().copy()
+    constant["Concrete compressive strength"] = 30.0
+    report = analyze_static_continuous_regression_leakage(
+        constant,
+        target="Concrete compressive strength",
+        candidate_features=("Cement",),
+    )
+    with pytest.raises(DataLeakageAnalysisError, match="Insufficient target variation"):
+        report.raise_if_invalid()
+
+
+def test_static_continuous_regression_audit_flags_target_derived_dependency() -> None:
+    from scripts.analyze_leakage import (
+        DerivedFeatureDependencySpec,
+        analyze_static_continuous_regression_leakage,
+    )
+
+    dataframe = _continuous_regression_frame()
+    spec = DerivedFeatureDependencySpec(
+        feature="Cement",
+        sources=("Concrete compressive strength",),
+        formula="synthetic target-derived feature",
+        operation=None,
+        note="Synthetic test.",
+    )
+    report = analyze_static_continuous_regression_leakage(
+        dataframe,
+        target="Concrete compressive strength",
+        candidate_features=("Cement",),
+        derived_dependencies=(spec,),
+    )
+
+    assert report.has_target_derived_dependencies
+    assert report.has_direct_target_leakage
+    assert report.dependency_frame().iloc[0]["Dependency status"] == (
+        "Target-derived leakage"
+    )
+
+
+def test_static_continuous_regression_audit_confirms_declared_ratio_dependency() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+        ratio_dependency,
+    )
+
+    dataframe = _continuous_regression_frame().assign(
+        water_cement_ratio=lambda frame: frame["Water"] / frame["Cement"]
+    )
+    report = analyze_static_continuous_regression_leakage(
+        dataframe,
+        target="Concrete compressive strength",
+        candidate_features=("Cement", "Water", "water_cement_ratio"),
+        derived_dependencies=(
+            ratio_dependency(
+                "water_cement_ratio",
+                numerator="Water",
+                denominator="Cement",
+            ),
+        ),
+    )
+
+    row = report.dependency_frame().iloc[0]
+    assert row["Dependency status"] == "Confirmed from retained columns"
+    assert row["Match rate"] == pytest.approx(1.0)
+    assert not report.has_direct_target_leakage
+
+
+def test_static_continuous_regression_audit_does_not_mutate_dataframe() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+    )
+
+    dataframe = _continuous_regression_frame()
+    before = dataframe.copy(deep=True)
+    analyze_static_continuous_regression_leakage(
+        dataframe,
+        target="Concrete compressive strength",
+        candidate_features=("Cement", "Water", "Age"),
+    )
+    pd.testing.assert_frame_equal(dataframe, before)
+
+
+def test_static_continuous_regression_audit_validates_tolerances() -> None:
+    from scripts.analyze_leakage import (
+        analyze_static_continuous_regression_leakage,
+    )
+
+    dataframe = _continuous_regression_frame()
+    with pytest.raises(DataLeakageAnalysisError, match="non-negative"):
+        analyze_static_continuous_regression_leakage(
+            dataframe,
+            target="Concrete compressive strength",
+            candidate_features=("Cement",),
+            relative_tolerance=-1.0,
+        )
+    with pytest.raises(DataLeakageAnalysisError, match="between 0 and 1"):
+        analyze_static_continuous_regression_leakage(
+            dataframe,
+            target="Concrete compressive strength",
+            candidate_features=("Cement",),
+            confirmation_rate=1.1,
+        )

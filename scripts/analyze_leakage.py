@@ -1749,3 +1749,584 @@ def _static_issue(
         "Issue": issue,
         "Details": details,
     }
+
+
+# ---------------------------------------------------------------------------
+# Static continuous-regression leakage and derived-feature dependency audit
+# ---------------------------------------------------------------------------
+
+_CONTINUOUS_PROXY_COLUMNS: Final[list[str]] = [
+    "Field",
+    "Detection method",
+    "Valid paired rows",
+    "Slope",
+    "Intercept",
+    "Match rate",
+    "Maximum absolute error",
+    "Maximum relative error",
+    "Candidate severity",
+    "Interpretation",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class StaticContinuousRegressionLeakageReport:
+    """Audit continuous-target leakage and deterministic feature dependencies."""
+
+    target: str
+    candidate_features: tuple[str, ...]
+    identifiers: tuple[str, ...]
+    row_count: int
+    target_present: bool
+    missing_candidate_features: tuple[str, ...]
+    missing_identifiers: tuple[str, ...]
+    target_proxy_candidates: pd.DataFrame
+    dependency_audit: pd.DataFrame
+    issues: pd.DataFrame
+
+    @property
+    def has_target_proxy_candidates(self) -> bool:
+        """Return whether a candidate numerically reproduces the target."""
+        return not self.target_proxy_candidates.empty
+
+    @property
+    def has_target_derived_dependencies(self) -> bool:
+        """Return whether a declared derived feature depends on the target."""
+        if self.dependency_audit.empty:
+            return False
+        return bool(self.dependency_audit["Target-derived"].any())
+
+    @property
+    def confirmed_derived_dependency_count(self) -> int:
+        """Return numerically confirmed retained dependencies."""
+        if self.dependency_audit.empty:
+            return 0
+        return int(
+            self.dependency_audit["Dependency status"]
+            .eq("Confirmed from retained columns")
+            .sum()
+        )
+
+    @property
+    def external_dependency_count(self) -> int:
+        """Return documented dependencies requiring an omitted primitive."""
+        if self.dependency_audit.empty:
+            return 0
+        return int(
+            self.dependency_audit["Dependency status"]
+            .eq("Documented; source column not retained")
+            .sum()
+        )
+
+    @property
+    def has_direct_target_leakage(self) -> bool:
+        """Return whether static leakage evidence requires resolution."""
+        return bool(
+            self.has_target_proxy_candidates
+            or self.has_target_derived_dependencies
+            or self.target in self.candidate_features
+        )
+
+    @property
+    def is_structurally_valid(self) -> bool:
+        """Return whether required fields and declarations are coherent."""
+        return self.issues.empty
+
+    def summary_frame(self) -> pd.DataFrame:
+        """Return a compact continuous-regression leakage summary."""
+        rows = [
+            {
+                "Metric": "Rows audited",
+                "Value": self.row_count,
+                "Interpretation": "Observations included in the static audit",
+            },
+            {
+                "Metric": "Candidate features",
+                "Value": len(self.candidate_features),
+                "Interpretation": "Predictor candidates reviewed for target leakage",
+            },
+            {
+                "Metric": "Source identifiers",
+                "Value": len(self.identifiers),
+                "Interpretation": "Identifier fields kept outside predictor semantics",
+            },
+            {
+                "Metric": "Target proxy candidates",
+                "Value": len(self.target_proxy_candidates),
+                "Interpretation": (
+                    "Exact or affine numerical target encodings detected"
+                ),
+            },
+            {
+                "Metric": "Declared derived dependencies",
+                "Value": len(self.dependency_audit),
+                "Interpretation": (
+                    "Source-backed mathematical feature dependencies audited"
+                ),
+            },
+            {
+                "Metric": "Confirmed derived dependencies",
+                "Value": self.confirmed_derived_dependency_count,
+                "Interpretation": (
+                    "Features numerically reproduced from retained inputs"
+                ),
+            },
+            {
+                "Metric": "External-source dependencies",
+                "Value": self.external_dependency_count,
+                "Interpretation": (
+                    "Documented derived features requiring an omitted primitive"
+                ),
+            },
+            {
+                "Metric": "Target-derived dependencies",
+                "Value": int(self.has_target_derived_dependencies),
+                "Interpretation": (
+                    "Derived features whose declared formula uses the target"
+                ),
+            },
+            {
+                "Metric": "Direct target leakage detected",
+                "Value": self.has_direct_target_leakage,
+                "Interpretation": (
+                    "No direct target leakage evidence found"
+                    if not self.has_direct_target_leakage
+                    else "Leakage evidence requires resolution before modeling"
+                ),
+            },
+        ]
+        return pd.DataFrame(rows, columns=_STATIC_SUMMARY_COLUMNS)
+
+    def dependency_frame(self) -> pd.DataFrame:
+        """Return the derived-feature dependency audit."""
+        return self.dependency_audit.copy(deep=True)
+
+    def target_proxy_candidates_frame(self) -> pd.DataFrame:
+        """Return numerical target-proxy evidence."""
+        return self.target_proxy_candidates.copy(deep=True)
+
+    def issues_frame(self) -> pd.DataFrame:
+        """Return structural audit issues."""
+        return self.issues.copy(deep=True)
+
+    def raise_if_invalid(self) -> None:
+        """Raise when required fields or dependency declarations are invalid."""
+        if self.issues.empty:
+            return
+        details = "; ".join(
+            f"{row['Item']}: {row['Issue']}"
+            for _, row in self.issues.iterrows()
+        )
+        raise DataLeakageAnalysisError(
+            "Static continuous-regression leakage audit is structurally invalid: "
+            + details
+        )
+
+
+def analyze_static_continuous_regression_leakage(
+    dataframe: pd.DataFrame,
+    *,
+    target: str,
+    candidate_features: Sequence[str],
+    identifiers: Sequence[str] | None = None,
+    derived_dependencies: Sequence[DerivedFeatureDependencySpec] = (),
+    relative_tolerance: float = 1e-8,
+    absolute_tolerance: float = 1e-10,
+    confirmation_rate: float = 0.99,
+) -> StaticContinuousRegressionLeakageReport:
+    """Audit static continuous-regression leakage without fitting a model."""
+    if not isinstance(dataframe, pd.DataFrame):
+        raise TypeError("dataframe must be a pandas DataFrame")
+    if not isinstance(target, str) or not target:
+        raise DataLeakageAnalysisError("target must be a non-empty field name")
+    if relative_tolerance < 0 or absolute_tolerance < 0:
+        raise DataLeakageAnalysisError("dependency tolerances must be non-negative")
+    if not 0 <= confirmation_rate <= 1:
+        raise DataLeakageAnalysisError("confirmation_rate must be between 0 and 1")
+
+    source = dataframe.copy(deep=True)
+    candidate_fields = _unique(tuple(str(value) for value in candidate_features))
+    identifier_fields = _unique(
+        tuple(str(value) for value in (identifiers or ()))
+    )
+    specs = tuple(derived_dependencies)
+    issues: list[dict[str, object]] = []
+
+    target_present = target in source.columns
+    missing_candidates = tuple(
+        field for field in candidate_fields if field not in source.columns
+    )
+    missing_identifiers = tuple(
+        field for field in identifier_fields if field not in source.columns
+    )
+
+    if not target_present:
+        issues.append(
+            _static_issue("Fields", target, "Missing target", "Target column is absent.")
+        )
+    for field in missing_candidates:
+        issues.append(
+            _static_issue(
+                "Fields",
+                field,
+                "Missing candidate feature",
+                "Candidate column is absent.",
+            )
+        )
+    for field in missing_identifiers:
+        issues.append(
+            _static_issue(
+                "Fields",
+                field,
+                "Missing identifier",
+                "Declared identifier is absent.",
+            )
+        )
+    if target in candidate_fields:
+        issues.append(
+            _static_issue(
+                "Fields",
+                target,
+                "Target included as candidate feature",
+                "The response variable must remain outside every predictor matrix.",
+            )
+        )
+    for field in candidate_fields:
+        if field in set(identifier_fields):
+            issues.append(
+                _static_issue(
+                    "Fields",
+                    field,
+                    "Identifier included as candidate feature",
+                    "Identifier semantics must remain outside predictor inputs.",
+                )
+            )
+
+    dependency_rows = _audit_static_derived_dependencies(
+        source,
+        target=target,
+        specs=specs,
+        relative_tolerance=relative_tolerance,
+        absolute_tolerance=absolute_tolerance,
+        confirmation_rate=confirmation_rate,
+        issues=issues,
+    )
+
+    proxy_rows: list[dict[str, object]] = []
+    if target_present:
+        target_values = source[target].copy(deep=True)
+        numeric_target = pd.to_numeric(target_values, errors="coerce")
+        invalid_target_count = int(
+            target_values.notna().sum() - numeric_target.notna().sum()
+        )
+        if invalid_target_count:
+            issues.append(
+                _static_issue(
+                    "Target",
+                    target,
+                    "Non-numeric target values",
+                    (
+                        f"{invalid_target_count} non-missing target values cannot "
+                        "be interpreted as numbers."
+                    ),
+                )
+            )
+        elif numeric_target.dropna().nunique() < 2:
+            issues.append(
+                _static_issue(
+                    "Target",
+                    target,
+                    "Insufficient target variation",
+                    "Continuous-regression leakage audit requires target variation.",
+                )
+            )
+        else:
+            for field in candidate_fields:
+                if field not in source.columns or field == target:
+                    continue
+                candidate = _detect_continuous_target_proxy(
+                    source[field],
+                    target_values,
+                    field=field,
+                    relative_tolerance=relative_tolerance,
+                    absolute_tolerance=absolute_tolerance,
+                    confirmation_rate=confirmation_rate,
+                )
+                if candidate is not None:
+                    proxy_rows.append(candidate)
+
+    return StaticContinuousRegressionLeakageReport(
+        target=target,
+        candidate_features=candidate_fields,
+        identifiers=identifier_fields,
+        row_count=len(source),
+        target_present=target_present,
+        missing_candidate_features=missing_candidates,
+        missing_identifiers=missing_identifiers,
+        target_proxy_candidates=pd.DataFrame(
+            proxy_rows,
+            columns=_CONTINUOUS_PROXY_COLUMNS,
+        ),
+        dependency_audit=pd.DataFrame(
+            dependency_rows,
+            columns=_DERIVED_DEPENDENCY_COLUMNS,
+        ),
+        issues=pd.DataFrame(issues, columns=_STATIC_ISSUE_COLUMNS),
+    )
+
+
+def _audit_static_derived_dependencies(
+    dataframe: pd.DataFrame,
+    *,
+    target: str,
+    specs: Sequence[DerivedFeatureDependencySpec],
+    relative_tolerance: float,
+    absolute_tolerance: float,
+    confirmation_rate: float,
+    issues: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Audit declared deterministic feature dependencies."""
+    seen_derived: set[str] = set()
+    dependency_rows: list[dict[str, object]] = []
+
+    for spec in specs:
+        if not isinstance(spec, DerivedFeatureDependencySpec):
+            raise TypeError(
+                "derived_dependencies must contain DerivedFeatureDependencySpec values"
+            )
+        if spec.feature in seen_derived:
+            issues.append(
+                _static_issue(
+                    "Dependency",
+                    spec.feature,
+                    "Duplicate dependency declaration",
+                    "Each derived feature may be declared only once.",
+                )
+            )
+        seen_derived.add(spec.feature)
+
+        target_derived = target in spec.sources
+        feature_present = spec.feature in dataframe.columns
+        missing_sources = tuple(
+            name for name in spec.sources if name not in dataframe.columns
+        )
+
+        if not feature_present:
+            issues.append(
+                _static_issue(
+                    "Dependency",
+                    spec.feature,
+                    "Derived feature missing",
+                    "Declared derived feature is absent from the dataframe.",
+                )
+            )
+
+        if spec.operation is not None and missing_sources:
+            issues.append(
+                _static_issue(
+                    "Dependency",
+                    spec.feature,
+                    "Dependency source missing",
+                    f"Cannot evaluate retained dependency; missing {list(missing_sources)}.",
+                )
+            )
+
+        auditable = bool(
+            spec.operation is not None
+            and feature_present
+            and not missing_sources
+        )
+        valid_rows = 0
+        match_rate: float | None = None
+        max_abs_error: float | None = None
+        max_rel_error: float | None = None
+
+        if auditable:
+            expected = _evaluate_derived_dependency(dataframe, spec)
+            observed = pd.to_numeric(dataframe[spec.feature], errors="coerce")
+            expected = pd.to_numeric(expected, errors="coerce")
+            valid_mask = observed.notna() & expected.notna()
+            valid_rows = int(valid_mask.sum())
+
+            if valid_rows:
+                observed_valid = observed.loc[valid_mask].astype(float)
+                expected_valid = expected.loc[valid_mask].astype(float)
+                abs_error = (observed_valid - expected_valid).abs()
+                tolerance = (
+                    absolute_tolerance
+                    + relative_tolerance * expected_valid.abs()
+                )
+                matches = abs_error <= tolerance
+                match_rate = float(matches.mean())
+                max_abs_error = float(abs_error.max())
+                denominator = expected_valid.abs().where(
+                    expected_valid.abs() > absolute_tolerance
+                )
+                relative_error = (abs_error / denominator).dropna()
+                max_rel_error = (
+                    float(relative_error.max())
+                    if not relative_error.empty
+                    else 0.0
+                )
+            else:
+                match_rate = 0.0
+
+        if target_derived:
+            status = "Target-derived leakage"
+            interpretation = (
+                "The declared feature dependency uses the target and must not "
+                "be a predictor."
+            )
+        elif spec.operation is None:
+            status = "Documented; source column not retained"
+            interpretation = spec.note or (
+                "The feature is derived, but at least one primitive source is "
+                "not retained."
+            )
+        elif match_rate is not None and match_rate >= confirmation_rate:
+            status = "Confirmed from retained columns"
+            interpretation = (
+                "The released feature is numerically reproducible from other "
+                "retained features; treat it as structural redundancy, not "
+                "target leakage."
+            )
+        else:
+            status = "Declared dependency not confirmed"
+            interpretation = (
+                "The declared mathematical relationship is not reproduced at "
+                "the configured tolerance and should be reviewed before relying "
+                "on it."
+            )
+
+        dependency_rows.append(
+            {
+                "Derived feature": spec.feature,
+                "Source features": spec.sources,
+                "Formula": spec.formula,
+                "Auditable from retained columns": auditable,
+                "Valid rows": valid_rows,
+                "Match rate": match_rate,
+                "Maximum absolute error": max_abs_error,
+                "Maximum relative error": max_rel_error,
+                "Target-derived": target_derived,
+                "Dependency status": status,
+                "Interpretation": interpretation,
+            }
+        )
+
+    return dependency_rows
+
+
+def _detect_continuous_target_proxy(
+    feature: pd.Series,
+    target: pd.Series,
+    *,
+    field: str,
+    relative_tolerance: float,
+    absolute_tolerance: float,
+    confirmation_rate: float,
+) -> dict[str, object] | None:
+    """Detect exact or affine numerical reproductions of a continuous target."""
+    paired = pd.DataFrame(
+        {
+            "feature": pd.to_numeric(feature.copy(deep=True), errors="coerce"),
+            "target": pd.to_numeric(target.copy(deep=True), errors="coerce"),
+        }
+    ).dropna()
+    if len(paired) < 3:
+        return None
+
+    finite_mask = paired.apply(
+        lambda column: column.map(
+            lambda value: math.isfinite(float(value))
+        )
+    ).all(axis=1)
+    paired = paired.loc[finite_mask].astype(float)
+    if len(paired) < 3 or paired["target"].nunique() < 3:
+        return None
+
+    target_values = paired["target"]
+    feature_values = paired["feature"]
+
+    def evidence(
+        predicted: pd.Series,
+    ) -> tuple[float, float, float]:
+        abs_error = (feature_values - predicted).abs()
+        tolerance = (
+            absolute_tolerance + relative_tolerance * predicted.abs()
+        )
+        match_rate = float((abs_error <= tolerance).mean())
+        max_abs_error = float(abs_error.max())
+        denominator = predicted.abs().where(
+            predicted.abs() > absolute_tolerance
+        )
+        relative_error = (abs_error / denominator).dropna()
+        max_rel_error = (
+            float(relative_error.max())
+            if not relative_error.empty
+            else 0.0
+        )
+        return match_rate, max_abs_error, max_rel_error
+
+    exact_rate, exact_abs, exact_rel = evidence(target_values)
+    if exact_rate >= confirmation_rate:
+        return {
+            "Field": field,
+            "Detection method": "Exact numeric target copy",
+            "Valid paired rows": len(paired),
+            "Slope": 1.0,
+            "Intercept": 0.0,
+            "Match rate": exact_rate,
+            "Maximum absolute error": exact_abs,
+            "Maximum relative error": exact_rel,
+            "Candidate severity": "Critical",
+            "Interpretation": (
+                "The field numerically reproduces the target and must not be "
+                "used as a predictor without resolving provenance."
+            ),
+        }
+
+    centered_target = target_values - float(target_values.mean())
+    target_ss = float(centered_target.pow(2).sum())
+    if target_ss <= 0:
+        return None
+
+    centered_feature = feature_values - float(feature_values.mean())
+    slope = float((centered_target * centered_feature).sum() / target_ss)
+    intercept = float(feature_values.mean() - slope * target_values.mean())
+    predicted = target_values * slope + intercept
+
+    match_rate, max_abs_error, max_rel_error = evidence(predicted)
+    if match_rate < confirmation_rate:
+        return None
+
+    residual_ss = float((feature_values - predicted).pow(2).sum())
+    feature_ss = float(centered_feature.pow(2).sum())
+    r_squared = (
+        1.0
+        if feature_ss == 0.0 and residual_ss == 0.0
+        else (
+            1.0 - residual_ss / feature_ss
+            if feature_ss > 0.0
+            else 0.0
+        )
+    )
+    if r_squared < confirmation_rate:
+        return None
+
+    return {
+        "Field": field,
+        "Detection method": "Affine numeric target transform",
+        "Valid paired rows": len(paired),
+        "Slope": slope,
+        "Intercept": intercept,
+        "Match rate": match_rate,
+        "Maximum absolute error": max_abs_error,
+        "Maximum relative error": max_rel_error,
+        "Candidate severity": "Critical",
+        "Interpretation": (
+            "The field is an effectively affine numerical transform of the "
+            "target. Treat it as a target-proxy candidate until provenance "
+            "proves otherwise."
+        ),
+    }
