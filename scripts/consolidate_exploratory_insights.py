@@ -137,6 +137,7 @@ _ALLOWED_EVIDENCE_KINDS: Final[frozenset[str]] = frozenset(
         "Feature dependency",
         "Feature-to-target",
         "Leakage/governance",
+        "Regression structure",
     }
 )
 
@@ -1153,6 +1154,576 @@ def consolidate_key_exploratory_insights_from_reports(
         limitations=limitations,
     )
 
+
+
+def consolidate_continuous_regression_key_exploratory_insights_from_reports(
+    *,
+    available_fields: Sequence[object],
+    quality_report: object,
+    target_report: object,
+    numerical_report: object,
+    feature_relationship_report: object,
+    feature_target_report: object,
+    regression_structure_report: object,
+    leakage_report: object,
+) -> KeyExploratoryInsightsReport:
+    """Build stage-17 continuous-regression insights from prior reports only.
+
+    The function consolidates evidence already produced by stages 10-16. It
+    does not refit models, recompute correlations, alter observations, or turn
+    exploratory thresholds into preparation decisions.
+    """
+    fields = _unique_text_tuple(available_fields)
+    target = _text(
+        getattr(
+            target_report,
+            "target",
+            getattr(feature_target_report, "target_name", ""),
+        )
+    )
+
+    insights: list[dict[str, object]] = []
+    evidence: list[dict[str, object]] = []
+    hypotheses: list[dict[str, object]] = []
+    actions: list[dict[str, object]] = []
+    limitations: list[dict[str, object]] = []
+
+    def add(
+        insight_id: str,
+        *,
+        theme: str,
+        title: str,
+        insight_type: str,
+        affected_fields: Sequence[object],
+        relevance: str,
+        status: str,
+        stages: Sequence[object],
+        summary: str,
+        implication: str,
+        boundary: str,
+        evidence_kind: str,
+        source_report: str,
+        source_metric: str,
+        observed: object,
+        comparison: object = None,
+        direction: str = "",
+    ) -> None:
+        insights.append({
+            "insight_id": insight_id,
+            "theme": theme,
+            "title": title,
+            "insight_type": insight_type,
+            "affected_fields": tuple(affected_fields),
+            "relevance": relevance,
+            "status": status,
+            "source_stages": tuple(stages),
+            "summary": summary,
+            "modeling_implication": implication,
+            "interpretation_boundary": boundary,
+        })
+        evidence.append({
+            "evidence_id": f"EVI-{insight_id.split('-')[-1]}",
+            "insight_id": insight_id,
+            "evidence_kind": evidence_kind,
+            "source_report": source_report,
+            "source_metric": source_metric,
+            "observed_value": deepcopy(observed),
+            "comparison_value": deepcopy(comparison),
+            "direction": direction,
+            "interpretation": summary,
+        })
+
+    # Stage 16 is the canonical quality synthesis; stage 17 only prioritizes it.
+    findings = quality_report.findings_frame()
+    blockers = quality_report.blockers_frame()
+    non_issues = quality_report.validated_non_issues_frame()
+    add(
+        "INS-001",
+        theme="Data quality",
+        title=(
+            "Structural data quality supports controlled preparation"
+            if blockers.empty
+            else "Data-quality conditions require targeted review"
+        ),
+        insight_type="Data-quality condition",
+        affected_fields=fields,
+        relevance="High",
+        status="Observed" if blockers.empty else "Unresolved",
+        stages=("7", "8", "9", "16"),
+        summary=(
+            f"Stage 16 consolidated {len(findings)} findings, {len(blockers)} "
+            f"blockers, and {len(non_issues)} validated non-issues."
+        ),
+        implication=(
+            "Restrict preparation to evidence-backed actions and preserve "
+            "conditions already validated as non-issues."
+        ),
+        boundary="Structural data quality does not establish regression performance.",
+        evidence_kind="Data quality",
+        source_report="quality_findings_report",
+        source_metric="Findings, blockers, validated non-issues",
+        observed={
+            "findings": len(findings),
+            "blockers": len(blockers),
+            "validated_non_issues": len(non_issues),
+        },
+        comparison={"blockers": 0},
+        direction="Controlled" if blockers.empty else "Review required",
+    )
+
+    # Continuous-target scale, spread, and descriptive extremes.
+    target_range = getattr(target_report, "observed_range", None)
+    extreme_count = int(getattr(target_report, "extreme_count", 0) or 0)
+    extreme_share = getattr(target_report, "extreme_share", None)
+    unit = _text(getattr(target_report, "unit", "")) or "target units"
+    add(
+        "INS-002",
+        theme="Target distribution",
+        title="Continuous target scale and extremes define the regression evaluation context",
+        insight_type="Pattern",
+        affected_fields=(target,) if target else (),
+        relevance="High",
+        status="Observed",
+        stages=("10",),
+        summary=(
+            f"Observed target range={_format_metric(target_range)} {unit}; "
+            f"mean={_format_metric(getattr(target_report, 'mean', None))}, "
+            f"median={_format_metric(getattr(target_report, 'median', None))}, "
+            f"standard deviation={_format_metric(getattr(target_report, 'standard_deviation', None))}, "
+            f"1.5-IQR extreme flags={extreme_count} ({_format_percent(extreme_share)})."
+        ),
+        implication=(
+            "Evaluate regression error on the original target scale and retain "
+            "extreme-value sensitivity as a validation concern rather than an "
+            "automatic cleaning rule."
+        ),
+        boundary=(
+            "Target spread and Tukey-fence extremes describe the observed sample; "
+            "they do not establish prediction difficulty or justify clipping."
+        ),
+        evidence_kind="Target distribution",
+        source_report="target_distribution_report",
+        source_metric="Range, dispersion, and 1.5-IQR target extremes",
+        observed={
+            "minimum": getattr(target_report, "minimum", None),
+            "maximum": getattr(target_report, "maximum", None),
+            "range": target_range,
+            "mean": getattr(target_report, "mean", None),
+            "median": getattr(target_report, "median", None),
+            "standard_deviation": getattr(target_report, "standard_deviation", None),
+            "extreme_count": extreme_count,
+            "extreme_share": extreme_share,
+        },
+        direction="Continuous spread",
+    )
+
+    # Feature-level extreme-value review remains descriptive.
+    outlier_features = tuple(getattr(numerical_report, "features_with_outliers", ()))
+    if outlier_features:
+        outlier_frame = numerical_report.outlier_summary_frame()
+        candidate_count = (
+            int(outlier_frame["Outlier count"].sum())
+            if "Outlier count" in outlier_frame
+            else None
+        )
+        add(
+            "INS-003",
+            theme="Numerical distributions",
+            title="IQR candidates occur in numerical feature distributions",
+            insight_type="Pattern",
+            affected_fields=outlier_features,
+            relevance="Medium",
+            status="Observed",
+            stages=("11", "16"),
+            summary=(
+                f"{len(outlier_features)} features contain IQR review candidates "
+                f"(candidate flags={candidate_count if candidate_count is not None else 'n/a'})."
+            ),
+            implication=(
+                "Keep raw observations and compare robustness or transformations "
+                "only inside leakage-safe validation pipelines."
+            ),
+            boundary="IQR candidates are statistical extremes, not proven measurement errors.",
+            evidence_kind="Numerical pattern",
+            source_report="numerical_report",
+            source_metric="IQR feature outlier candidates",
+            observed={
+                "features": outlier_features,
+                "candidate_flags": candidate_count,
+            },
+            comparison=0,
+            direction="Review only",
+        )
+
+    # Pairwise association and source-backed dependency evidence.
+    review_pairs = feature_relationship_report.numerical_review_frame()
+    redundant = (
+        review_pairs.loc[review_pairs["Potential redundancy"]].reset_index(drop=True)
+        if not review_pairs.empty and "Potential redundancy" in review_pairs
+        else pd.DataFrame()
+    )
+    confirmed = int(getattr(leakage_report, "confirmed_derived_dependency_count", 0))
+    if not redundant.empty or confirmed:
+        strongest_pair: tuple[str, str] = ()
+        strongest_value: object = None
+        if not review_pairs.empty:
+            first = review_pairs.iloc[0]
+            strongest_pair = (
+                _text(first.get("Feature A")),
+                _text(first.get("Feature B")),
+            )
+            strongest_value = first.get("Maximum absolute association")
+
+        dependency_frame = leakage_report.dependency_frame()
+        derived_fields: tuple[str, ...] = ()
+        if not dependency_frame.empty and "Dependency status" in dependency_frame:
+            selected = dependency_frame.loc[
+                dependency_frame["Dependency status"].eq(
+                    "Confirmed from retained columns"
+                )
+            ]
+            if "Derived feature" in selected:
+                derived_fields = tuple(selected["Derived feature"].astype(str))
+
+        add(
+            "INS-004",
+            theme="Feature dependency",
+            title="Strong feature associations may create redundant regression information",
+            insight_type="Dependency",
+            affected_fields=_unique_text_tuple((*strongest_pair, *derived_fields)),
+            relevance="High",
+            status="Observed",
+            stages=("12", "15"),
+            summary=(
+                f"{len(redundant)} feature pairs meet the redundancy-review threshold "
+                f"and {confirmed} retained derived dependencies are numerically confirmed. "
+                f"Strongest reviewed pair={strongest_pair or 'n/a'} "
+                f"({_format_metric(strongest_value)})."
+            ),
+            implication=(
+                "Use the complete validated feature set as a baseline, then compare "
+                "regularized or ablated variants under the same regression validation protocol."
+            ),
+            boundary="Strong association does not by itself justify feature removal before splitting.",
+            evidence_kind="Feature dependency",
+            source_report="feature_relationship_report + leakage_report",
+            source_metric="Redundancy-review pairs and confirmed dependencies",
+            observed={
+                "redundancy_pairs": len(redundant),
+                "confirmed_dependencies": confirmed,
+                "strongest_pair": strongest_pair,
+                "strongest_association": strongest_value,
+            },
+            comparison={
+                "redundancy_threshold": getattr(
+                    feature_relationship_report,
+                    "redundancy_review_threshold",
+                    None,
+                )
+            },
+            direction="Structural redundancy",
+        )
+        hypotheses.append({
+            "hypothesis_id": "HYP-001",
+            "linked_insight_ids": ("INS-004",),
+            "title": "Some strongly associated inputs may add limited incremental value",
+            "hypothesis": (
+                "A regularized or dependency-aware reduced feature set may match "
+                "the all-feature regression baseline without materially degrading "
+                "held-out error."
+            ),
+            "status": "Unvalidated",
+            "confounding_risks": (),
+            "required_validation": (
+                "Compare all-feature, regularized, and ablated pipelines under "
+                "the same cross-validation protocol and regression metrics."
+            ),
+            "decision_stage": "Model selection",
+        })
+        actions.append({
+            "action_id": "VAL-001",
+            "hypothesis_ids": ("HYP-001",),
+            "validation_type": "Ablation",
+            "action": (
+                "Compare the full feature set with dependency-aware ablation "
+                "variants inside training folds."
+            ),
+            "stage": "Model selection",
+            "blocking": False,
+            "status": "Planned",
+            "acceptance_criteria": (
+                "Any removal is supported by stable held-out regression metrics "
+                "across folds."
+            ),
+        })
+
+    # Univariate continuous feature-to-target association.
+    relationships = feature_target_report.relationships_frame()
+    if not relationships.empty:
+        first = relationships.iloc[0]
+        top_feature = _text(first.get("Feature"))
+        top_association = first.get("Maximum absolute association")
+        pearson = first.get("Pearson correlation")
+        spearman = first.get("Spearman correlation")
+        review_count = (
+            int(relationships["Review flag"].sum())
+            if "Review flag" in relationships
+            else 0
+        )
+        add(
+            "INS-005",
+            theme="Feature-to-target association",
+            title="Numerical inputs show measurable univariate association with the continuous target",
+            insight_type="Pattern",
+            affected_fields=(
+                tuple(getattr(feature_target_report, "requested_features", ()))
+                + ((target,) if target else ())
+            ),
+            relevance="High",
+            status="Observed",
+            stages=("13",),
+            summary=(
+                f"{review_count} features meet the exploratory association threshold; "
+                f"strongest={top_feature or 'n/a'} "
+                f"(max absolute association={_format_metric(top_association)}, "
+                f"Pearson={_format_metric(pearson)}, Spearman={_format_metric(spearman)})."
+            ),
+            implication=(
+                "Retain the validated inputs for the baseline and evaluate their "
+                "incremental contribution jointly during model selection."
+            ),
+            boundary=(
+                "Univariate association is not causality, incremental importance, "
+                "or held-out predictive performance."
+            ),
+            evidence_kind="Feature-to-target",
+            source_report="feature_target_report",
+            source_metric="Pearson/Spearman continuous-target association",
+            observed={
+                "review_candidates": review_count,
+                "top_feature": top_feature,
+                "top_association": top_association,
+                "top_pearson": pearson,
+                "top_spearman": spearman,
+            },
+            comparison={
+                "review_threshold": getattr(
+                    feature_target_report,
+                    "association_review_threshold",
+                    None,
+                )
+            },
+            direction="Continuous association",
+        )
+
+    # Stage 14 structural diagnostics: curvature and pairwise interactions.
+    nonlinearity = regression_structure_report.nonlinearity_frame()
+    interactions = regression_structure_report.interaction_frame()
+    nonlinear_signals = (
+        nonlinearity.loc[nonlinearity["Nonlinearity signal"]].reset_index(drop=True)
+        if not nonlinearity.empty and "Nonlinearity signal" in nonlinearity
+        else pd.DataFrame()
+    )
+    interaction_signals = (
+        interactions.loc[interactions["Interaction signal"]].reset_index(drop=True)
+        if not interactions.empty and "Interaction signal" in interactions
+        else pd.DataFrame()
+    )
+
+    strongest_nonlinear_feature = ""
+    strongest_nonlinear_gain: object = None
+    if not nonlinear_signals.empty:
+        first = nonlinear_signals.iloc[0]
+        strongest_nonlinear_feature = _text(first.get("Feature"))
+        strongest_nonlinear_gain = first.get("Adjusted R squared gain")
+
+    strongest_interaction_pair: tuple[str, str] = ()
+    strongest_interaction_gain: object = None
+    if not interaction_signals.empty:
+        first = interaction_signals.iloc[0]
+        strongest_interaction_pair = (
+            _text(first.get("Feature A")),
+            _text(first.get("Feature B")),
+        )
+        strongest_interaction_gain = first.get("Adjusted R squared gain")
+
+    structural_signal = bool(len(nonlinear_signals) or len(interaction_signals))
+    add(
+        "INS-006",
+        theme="Regression structure",
+        title=(
+            "Exploratory diagnostics indicate nonlinear or interaction structure"
+            if structural_signal
+            else "Exploratory structural diagnostics do not cross review thresholds"
+        ),
+        insight_type="Pattern",
+        affected_fields=(
+            tuple(getattr(regression_structure_report, "requested_features", ()))
+            + ((target,) if target else ())
+        ),
+        relevance="High" if structural_signal else "Medium",
+        status="Observed",
+        stages=("14",),
+        summary=(
+            f"Nonlinearity signals={len(nonlinear_signals)}; interaction signals={len(interaction_signals)}; "
+            f"strongest nonlinear feature={strongest_nonlinear_feature or 'n/a'} "
+            f"(adjusted-R² gain={_format_metric(strongest_nonlinear_gain)}); "
+            f"strongest interaction={strongest_interaction_pair or 'n/a'} "
+            f"(adjusted-R² gain={_format_metric(strongest_interaction_gain)})."
+        ),
+        implication=(
+            "Compare a transparent additive baseline with model families capable "
+            "of representing nonlinearities and interactions under the same "
+            "leakage-safe cross-validation protocol."
+            if structural_signal
+            else
+            "Retain an additive baseline, but do not exclude flexible model families "
+            "solely because these in-sample thresholds were not crossed."
+        ),
+        boundary=(
+            "Adjusted-R² gains are in-sample structural diagnostics; they do not "
+            "estimate generalization performance or establish causal interactions."
+        ),
+        evidence_kind="Regression structure",
+        source_report="regression_structure_report",
+        source_metric="Adjusted-R² gains for quadratic and interaction terms",
+        observed={
+            "nonlinearity_signals": len(nonlinear_signals),
+            "interaction_signals": len(interaction_signals),
+            "strongest_nonlinear_feature": strongest_nonlinear_feature,
+            "strongest_nonlinear_gain": strongest_nonlinear_gain,
+            "strongest_interaction_pair": strongest_interaction_pair,
+            "strongest_interaction_gain": strongest_interaction_gain,
+        },
+        comparison={
+            "nonlinearity_threshold": getattr(
+                regression_structure_report,
+                "nonlinearity_review_threshold",
+                None,
+            ),
+            "interaction_threshold": getattr(
+                regression_structure_report,
+                "interaction_review_threshold",
+                None,
+            ),
+        },
+        direction="Structural signals observed" if structural_signal else "Below review thresholds",
+    )
+
+    if structural_signal:
+        hypotheses.append({
+            "hypothesis_id": "HYP-002",
+            "linked_insight_ids": ("INS-006",),
+            "title": "Flexible regression families may improve on a strictly additive linear baseline",
+            "hypothesis": (
+                "Model families that can represent nonlinear effects or interactions "
+                "may reduce held-out regression error relative to a strictly additive "
+                "linear baseline."
+            ),
+            "status": "Unvalidated",
+            "confounding_risks": (
+                "In-sample diagnostic optimism",
+                "Feature scale and correlation",
+            ),
+            "required_validation": (
+                "Compare additive linear and flexible candidate families using the "
+                "same leakage-safe cross-validation folds and regression metrics."
+            ),
+            "decision_stage": "Model selection",
+        })
+        actions.append({
+            "action_id": "VAL-002",
+            "hypothesis_ids": ("HYP-002",),
+            "validation_type": "Cross-validation",
+            "action": (
+                "Compare a transparent additive baseline with nonlinear and "
+                "interaction-capable regression candidates."
+            ),
+            "stage": "Model selection",
+            "blocking": False,
+            "status": "Planned",
+            "acceptance_criteria": (
+                "Any complexity claim is supported by stable held-out regression "
+                "error improvements across folds, not by in-sample adjusted-R² alone."
+            ),
+        })
+
+    # Static target leakage remains a governance gate.
+    direct_leakage = bool(getattr(leakage_report, "has_direct_target_leakage", False))
+    proxy_count = len(leakage_report.target_proxy_candidates_frame())
+    add(
+        "INS-007",
+        theme="Leakage governance",
+        title=(
+            "Direct target leakage requires resolution"
+            if direct_leakage
+            else "No direct numerical target leakage was detected in candidate features"
+        ),
+        insight_type=(
+            "Governance limitation" if direct_leakage else "Data-quality condition"
+        ),
+        affected_fields=(
+            tuple(getattr(leakage_report, "candidate_features", ()))
+            + ((target,) if target else ())
+        ),
+        relevance="High",
+        status="Unresolved" if direct_leakage else "Controlled",
+        stages=("15", "16"),
+        summary=(
+            f"Direct target leakage={direct_leakage}; target proxy candidates={proxy_count}; "
+            f"confirmed non-target derived dependencies="
+            f"{getattr(leakage_report, 'confirmed_derived_dependency_count', 0)}."
+        ),
+        implication=(
+            "Resolve target-derived numerical proxies before modeling."
+            if direct_leakage
+            else "Keep target semantics isolated and preserve leakage-safe fitting rules."
+        ),
+        boundary=(
+            "Absence of static target proxies does not replace train/validation "
+            "isolation for learned transformations and model fitting."
+        ),
+        evidence_kind="Leakage/governance",
+        source_report="leakage_report",
+        source_metric="Continuous target leakage audit",
+        observed={
+            "direct_target_leakage": direct_leakage,
+            "target_proxy_candidates": proxy_count,
+        },
+        comparison={"direct_target_leakage": False},
+        direction="Blocked" if direct_leakage else "Controlled",
+    )
+
+    limitations.append({
+        "limitation_id": "LIM-001",
+        "theme": "Exploratory interpretation",
+        "title": "EDA associations and structural fits do not establish regression performance",
+        "limitation_type": "Modeling",
+        "affected_fields": (
+            tuple(getattr(feature_target_report, "requested_features", ()))
+            + ((target,) if target else ())
+        ),
+        "severity": "Contextual",
+        "status": "Accepted",
+        "source_stages": ("12", "13", "14", "17"),
+        "implication": (
+            "Correlation, adjusted-R² gains, redundancy signals, and interaction "
+            "diagnostics cannot be reported as out-of-sample predictive performance."
+        ),
+        "required_resolution": (
+            "Validate predictive claims with leakage-safe cross-validation, held-out "
+            "regression metrics, and residual/error analysis."
+        ),
+    })
+
+    return consolidate_key_exploratory_insights(
+        available_fields=fields,
+        insights=insights,
+        evidence=evidence,
+        hypotheses=hypotheses,
+        validation_actions=actions,
+        limitations=limitations,
+    )
 
 def _format_metric(value: object) -> str:
     if value is None:

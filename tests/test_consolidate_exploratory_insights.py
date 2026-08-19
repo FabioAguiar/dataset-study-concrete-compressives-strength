@@ -9,6 +9,7 @@ import pytest
 
 from scripts.consolidate_exploratory_insights import (
     ExploratoryInsightsConsolidationError,
+    consolidate_continuous_regression_key_exploratory_insights_from_reports,
     consolidate_key_exploratory_insights,
     consolidate_key_exploratory_insights_from_reports,
 )
@@ -809,3 +810,296 @@ def test_compact_stage17_frames_are_not_full_contract_dumps() -> None:
         "Modeling implication",
         "Interpretation boundary",
     ]
+
+
+
+def _continuous_regression_report_bundle(
+    *,
+    direct_leakage: bool = False,
+    with_outliers: bool = True,
+    with_redundancy: bool = True,
+    with_structural_signals: bool = True,
+):
+    from types import SimpleNamespace
+
+    quality_report = SimpleNamespace(
+        findings_frame=lambda: pd.DataFrame(columns=["Finding ID", "Status"]),
+        blockers_frame=lambda: pd.DataFrame(columns=["Finding ID"]),
+        validated_non_issues_frame=lambda: pd.DataFrame(
+            [{"Non-issue ID": "NIS-001"}]
+        ),
+    )
+
+    target_report = SimpleNamespace(
+        target="Concrete compressive strength",
+        unit="MPa",
+        minimum=2.33,
+        maximum=82.60,
+        observed_range=80.27,
+        mean=35.82,
+        median=34.45,
+        standard_deviation=16.71,
+        extreme_count=4,
+        extreme_share=4 / 1030,
+    )
+
+    outlier_summary = (
+        pd.DataFrame(
+            [
+                {"Feature": "Cement", "Outlier count": 3},
+                {"Feature": "Age", "Outlier count": 5},
+            ]
+        )
+        if with_outliers
+        else pd.DataFrame(columns=["Feature", "Outlier count"])
+    )
+    numerical_report = SimpleNamespace(
+        features_with_outliers=("Cement", "Age") if with_outliers else (),
+        outlier_summary_frame=lambda: outlier_summary.copy(deep=True),
+    )
+
+    relationship_review = (
+        pd.DataFrame(
+            [
+                {
+                    "Feature A": "Water",
+                    "Feature B": "Superplasticizer",
+                    "Maximum absolute association": 0.93,
+                    "Potential redundancy": True,
+                }
+            ]
+        )
+        if with_redundancy
+        else pd.DataFrame(
+            columns=[
+                "Feature A",
+                "Feature B",
+                "Maximum absolute association",
+                "Potential redundancy",
+            ]
+        )
+    )
+    feature_relationship_report = SimpleNamespace(
+        redundancy_review_threshold=0.90,
+        numerical_review_frame=lambda: relationship_review.copy(deep=True),
+    )
+
+    target_relationships = pd.DataFrame(
+        [
+            {
+                "Feature": "Cement",
+                "Pearson correlation": 0.50,
+                "Spearman correlation": 0.48,
+                "Maximum absolute association": 0.50,
+                "Review flag": True,
+            },
+            {
+                "Feature": "Age",
+                "Pearson correlation": 0.33,
+                "Spearman correlation": 0.55,
+                "Maximum absolute association": 0.55,
+                "Review flag": True,
+            },
+        ]
+    ).sort_values(
+        ["Maximum absolute association", "Feature"],
+        ascending=[False, True],
+    ).reset_index(drop=True)
+    feature_target_report = SimpleNamespace(
+        requested_features=(
+            "Cement",
+            "Water",
+            "Superplasticizer",
+            "Age",
+        ),
+        target_name="Concrete compressive strength",
+        association_review_threshold=0.30,
+        relationships_frame=lambda: target_relationships.copy(deep=True),
+    )
+
+    if with_structural_signals:
+        nonlinearity = pd.DataFrame(
+            [
+                {
+                    "Feature": "Age",
+                    "Adjusted R squared gain": 0.12,
+                    "Nonlinearity signal": True,
+                },
+                {
+                    "Feature": "Cement",
+                    "Adjusted R squared gain": 0.01,
+                    "Nonlinearity signal": False,
+                },
+            ]
+        )
+        interactions = pd.DataFrame(
+            [
+                {
+                    "Feature A": "Cement",
+                    "Feature B": "Age",
+                    "Adjusted R squared gain": 0.05,
+                    "Interaction signal": True,
+                }
+            ]
+        )
+    else:
+        nonlinearity = pd.DataFrame(
+            [
+                {
+                    "Feature": "Age",
+                    "Adjusted R squared gain": 0.01,
+                    "Nonlinearity signal": False,
+                }
+            ]
+        )
+        interactions = pd.DataFrame(
+            [
+                {
+                    "Feature A": "Cement",
+                    "Feature B": "Age",
+                    "Adjusted R squared gain": 0.01,
+                    "Interaction signal": False,
+                }
+            ]
+        )
+
+    regression_structure_report = SimpleNamespace(
+        requested_features=(
+            "Cement",
+            "Water",
+            "Superplasticizer",
+            "Age",
+        ),
+        nonlinearity_review_threshold=0.02,
+        interaction_review_threshold=0.02,
+        nonlinearity_frame=lambda: nonlinearity.copy(deep=True),
+        interaction_frame=lambda: interactions.copy(deep=True),
+    )
+
+    proxies = (
+        pd.DataFrame([{"Candidate feature": "target_proxy"}])
+        if direct_leakage
+        else pd.DataFrame(columns=["Candidate feature"])
+    )
+    leakage_report = SimpleNamespace(
+        candidate_features=(
+            "Cement",
+            "Water",
+            "Superplasticizer",
+            "Age",
+        ),
+        has_direct_target_leakage=direct_leakage,
+        confirmed_derived_dependency_count=0,
+        dependency_frame=lambda: pd.DataFrame(
+            columns=["Derived feature", "Dependency status"]
+        ),
+        target_proxy_candidates_frame=lambda: proxies.copy(deep=True),
+    )
+
+    return {
+        "available_fields": (
+            "Cement",
+            "Water",
+            "Superplasticizer",
+            "Age",
+            "Concrete compressive strength",
+        ),
+        "quality_report": quality_report,
+        "target_report": target_report,
+        "numerical_report": numerical_report,
+        "feature_relationship_report": feature_relationship_report,
+        "feature_target_report": feature_target_report,
+        "regression_structure_report": regression_structure_report,
+        "leakage_report": leakage_report,
+    }
+
+
+def test_continuous_report_backed_consolidation_builds_regression_insights() -> None:
+    report = consolidate_continuous_regression_key_exploratory_insights_from_reports(
+        **_continuous_regression_report_bundle()
+    )
+
+    assert report.is_structurally_valid
+    assert report.is_ready_for_preparation_decisions
+    assert report.is_ready_for_modeling
+    assert set(report.insights_frame()["Insight ID"]) == {
+        "INS-001",
+        "INS-002",
+        "INS-003",
+        "INS-004",
+        "INS-005",
+        "INS-006",
+        "INS-007",
+    }
+    assert set(report.hypotheses_frame()["Hypothesis ID"]) == {
+        "HYP-001",
+        "HYP-002",
+    }
+    assert set(report.validation_actions_frame()["Action ID"]) == {
+        "VAL-001",
+        "VAL-002",
+    }
+
+
+def test_continuous_target_insight_uses_regression_scale_not_classes() -> None:
+    report = consolidate_continuous_regression_key_exploratory_insights_from_reports(
+        **_continuous_regression_report_bundle()
+    )
+    row = report.insights_frame().set_index("Insight ID").loc["INS-002"]
+
+    assert "80.2700 MPa" in row["Summary"]
+    assert "class" not in row["Summary"].casefold()
+    assert "clipping" in row["Interpretation boundary"]
+
+
+def test_continuous_structure_insight_creates_validation_hypothesis_only_when_signaled() -> None:
+    with_signal = consolidate_continuous_regression_key_exploratory_insights_from_reports(
+        **_continuous_regression_report_bundle(with_structural_signals=True)
+    )
+    without_signal = consolidate_continuous_regression_key_exploratory_insights_from_reports(
+        **_continuous_regression_report_bundle(with_structural_signals=False)
+    )
+
+    assert "HYP-002" in set(with_signal.hypotheses_frame()["Hypothesis ID"])
+    assert "HYP-002" not in set(without_signal.hypotheses_frame()["Hypothesis ID"])
+    structure = without_signal.insights_frame().set_index("Insight ID").loc["INS-006"]
+    assert structure["Relevance"] == "Medium"
+    assert "do not cross" in structure["Title"]
+
+
+def test_continuous_consolidation_omits_optional_outlier_and_redundancy_insights() -> None:
+    report = consolidate_continuous_regression_key_exploratory_insights_from_reports(
+        **_continuous_regression_report_bundle(
+            with_outliers=False,
+            with_redundancy=False,
+        )
+    )
+
+    insight_ids = set(report.insights_frame()["Insight ID"])
+    assert "INS-003" not in insight_ids
+    assert "INS-004" not in insight_ids
+    assert "HYP-001" not in set(report.hypotheses_frame()["Hypothesis ID"])
+
+
+def test_continuous_consolidation_blocks_modeling_on_direct_leakage() -> None:
+    report = consolidate_continuous_regression_key_exploratory_insights_from_reports(
+        **_continuous_regression_report_bundle(direct_leakage=True)
+    )
+
+    leakage = report.insights_frame().set_index("Insight ID").loc["INS-007"]
+    assert leakage["Status"] == "Unresolved"
+    assert leakage["Insight type"] == "Governance limitation"
+    assert not report.is_ready_for_modeling
+
+
+def test_continuous_consolidation_preserves_regression_interpretation_boundary() -> None:
+    report = consolidate_continuous_regression_key_exploratory_insights_from_reports(
+        **_continuous_regression_report_bundle()
+    )
+
+    limitation = report.limitations_frame().set_index("Limitation ID").loc["LIM-001"]
+    assert "regression performance" in limitation["Title"]
+    assert "cross-validation" in limitation["Required resolution"]
+    assert "multiclass" not in " ".join(
+        report.insights_frame()["Summary"].astype(str)
+    ).casefold()
