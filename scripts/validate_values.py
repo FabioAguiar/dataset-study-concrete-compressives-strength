@@ -248,15 +248,17 @@ def analyze_source_backed_missing_and_invalid_values(
     *,
     source_variables_file: str | Path,
     target: str,
-    expected_target_values: Sequence[object],
+    expected_target_values: Sequence[object] | None = None,
     max_issue_samples: int = 10,
 ) -> ValueQualityReport:
     """Analyze value quality using source types and the target contract.
 
-    The source-variable table provides structural type semantics, while the
-    notebook-supplied target contract provides the only finite categorical
-    domain enforced here. Numeric range/domain rules remain the responsibility
-    of the preceding domain-validation stage.
+    The source-variable table provides structural type semantics. A finite
+    ``expected_target_values`` domain may additionally be supplied for
+    categorical targets. Continuous regression targets omit that argument and
+    are validated through their source-declared numeric type instead. Numeric
+    range/domain rules remain the responsibility of the preceding
+    domain-validation stage.
     """
     if not isinstance(dataframe, pd.DataFrame):
         raise TypeError("dataframe must be a pandas DataFrame.")
@@ -265,11 +267,16 @@ def analyze_source_backed_missing_and_invalid_values(
     if target_name not in dataframe.columns:
         raise KeyError(f"Target column not found: {target_name!r}")
 
-    target_values = tuple(expected_target_values)
-    if not target_values:
-        raise ValueValidationError(
-            "expected_target_values must contain at least one target value."
-        )
+    target_values: tuple[object, ...] | None
+    if expected_target_values is None:
+        target_values = None
+    else:
+        target_values = tuple(expected_target_values)
+        if not target_values:
+            raise ValueValidationError(
+                "expected_target_values must contain at least one target value "
+                "when supplied."
+            )
 
     source_rows = _load_source_variable_rows(source_variables_file)
     dataset_columns = tuple(str(column) for column in dataframe.columns)
@@ -294,7 +301,7 @@ def analyze_source_backed_missing_and_invalid_values(
                 f"{source_rows[column]!r}."
             )
 
-        if column == target_name:
+        if column == target_name and target_values is not None:
             rule.update(
                 {
                     "allowed_values": target_values,

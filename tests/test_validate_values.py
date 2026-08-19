@@ -441,3 +441,66 @@ def test_finite_rule_requires_numeric_validation() -> None:
             dataframe,
             {"value": {"finite": True}},
         )
+
+def test_source_backed_analysis_supports_continuous_regression_target(
+    tmp_path,
+) -> None:
+    dataframe = pd.DataFrame(
+        {
+            "Cement": [540.0, 332.5, 198.6],
+            "Age": [28, 90, 365],
+            "Concrete compressive strength": [79.99, 40.27, float("inf")],
+        }
+    )
+    variables_file = tmp_path / "variables.csv"
+    pd.DataFrame(
+        {
+            "name": [
+                "Cement",
+                "Age",
+                "Concrete compressive strength",
+            ],
+            "type": ["Continuous", "Integer", "Continuous"],
+        }
+    ).to_csv(variables_file, index=False)
+
+    report = analyze_source_backed_missing_and_invalid_values(
+        dataframe,
+        source_variables_file=variables_file,
+        target="Concrete compressive strength",
+    )
+
+    checks = report.column_frame().set_index("Column")
+    assert checks.loc["Cement", "Status"] == "Valid"
+    assert checks.loc["Age", "Status"] == "Valid"
+    assert checks.loc["Concrete compressive strength", "Invalid count"] == 1
+    assert (
+        checks.loc["Concrete compressive strength", "Issue types"]
+        == "Non-finite value"
+    )
+    assert report.is_fully_assessed
+
+
+def test_source_backed_analysis_rejects_empty_target_domain_when_supplied(
+    tmp_path,
+) -> None:
+    dataframe = pd.DataFrame({"Class": ["SEKER"]})
+    variables_file = tmp_path / "variables.csv"
+    pd.DataFrame(
+        {
+            "name": ["Class"],
+            "type": ["Categorical"],
+        }
+    ).to_csv(variables_file, index=False)
+
+    with pytest.raises(
+        ValueValidationError,
+        match="expected_target_values must contain at least one target value",
+    ):
+        analyze_source_backed_missing_and_invalid_values(
+            dataframe,
+            source_variables_file=variables_file,
+            target="Class",
+            expected_target_values=(),
+        )
+
