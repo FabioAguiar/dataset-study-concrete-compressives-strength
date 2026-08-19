@@ -30,7 +30,7 @@ import sklearn
 from sklearn.base import BaseEstimator, clone
 from sklearn.calibration import calibration_curve
 from sklearn.compose import ColumnTransformer
-from sklearn.dummy import DummyClassifier
+from sklearn.dummy import DummyClassifier, DummyRegressor
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
@@ -47,6 +47,10 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
     roc_curve,
+    mean_absolute_error,
+    mean_squared_error,
+    median_absolute_error,
+    r2_score,
 )
 from sklearn.model_selection import (
     GridSearchCV,
@@ -54,6 +58,7 @@ from sklearn.model_selection import (
     ParameterSampler,
     RandomizedSearchCV,
     StratifiedKFold,
+    KFold,
     cross_validate,
 )
 from sklearn.pipeline import Pipeline
@@ -3326,3 +3331,408 @@ __all__.extend(
         "write_multiclass_model_selection_artifacts",
     ]
 )
+
+
+# ---------------------------------------------------------------------------
+# Continuous-regression model selection (artifact contract v3)
+# ---------------------------------------------------------------------------
+
+REGRESSION_ARTIFACT_FILENAMES: tuple[str, ...] = (
+    "model-selection-manifest.json", "candidate-results.json",
+    "cross-validation-results.csv", "validation-evidence.json",
+    "selection-analysis.json", "model-selection-handoff.json",
+)
+
+_REGRESSION_SCHEMAS = {
+    "model-selection-manifest.json": ("model-selection-manifest.v3", "model_selection_manifest"),
+    "candidate-results.json": ("candidate-results.v3", "candidate_results"),
+    "validation-evidence.json": ("validation-evidence.v3", "validation_evidence"),
+    "selection-analysis.json": ("selection-analysis.v3", "selection_analysis"),
+    "model-selection-handoff.json": ("model-selection-handoff.v3", "model_selection_handoff"),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class RegressionPartitionRoles:
+    _x_train: pd.DataFrame
+    _y_train: pd.Series
+    _x_validation: pd.DataFrame
+    _y_validation: pd.Series
+    x_train = property(lambda self: self._x_train.copy(deep=True))
+    y_train = property(lambda self: self._y_train.copy(deep=True))
+    x_validation = property(lambda self: self._x_validation.copy(deep=True))
+    y_validation = property(lambda self: self._y_validation.copy(deep=True))
+
+
+def validate_regression_model_selection_contract(contract: Mapping[str, Any]) -> dict[str, Any]:
+    result = _deepcopy(dict(contract))
+    required = {"problem_type", "target_semantics", "target_unit", "primary_metric",
+                "primary_metric_direction", "refit_metric", "cv",
+                "test_partition_sealed", "test_partition_evaluated"}
+    missing = sorted(required - result.keys())
+    if missing:
+        raise ModelSelectionContractError(f"Missing regression contract fields: {missing}")
+    checks = (("problem_type", "continuous_regression"),
+              ("target_semantics", "Continuous / quantitative"),
+              ("target_unit", "MPa"), ("primary_metric", "mae"),
+              ("primary_metric_direction", "lower_is_better"), ("refit_metric", "mae"))
+    for field, expected in checks:
+        if result.get(field) != expected:
+            raise ModelSelectionContractError(f"{field} must be {expected!r}.")
+    cv = result["cv"]
+    if not isinstance(cv, Mapping) or cv.get("strategy") != "KFold":
+        raise ModelSelectionContractError("Regression cv.strategy must be KFold.")
+    if cv.get("n_splits") != 5 or cv.get("shuffle") is not True or cv.get("random_state") != 42:
+        raise ModelSelectionContractError("Regression CV must be 5-fold, shuffled, seed 42.")
+    if result["test_partition_sealed"] is not True or result["test_partition_evaluated"] is not False:
+        raise ModelSelectionContractError("Test must remain sealed and unevaluated.")
+    return result
+
+
+def validate_regression_feature_partition_roles(*, train: pd.DataFrame,
+        validation: pd.DataFrame, feature_columns: Sequence[str],
+        identifier_columns: Sequence[str], target_column: str) -> RegressionPartitionRoles:
+    features = list(feature_columns)
+    if not features or len(features) != len(set(features)) or target_column in features:
+        raise FeatureRoleError("Regression feature order is invalid.")
+    forbidden = set(identifier_columns) | {"__membership_token__", "membership_token", "row_occurrence_token"}
+    if forbidden.intersection(features):
+        raise FeatureRoleError("Identifiers or technical membership tokens cannot be predictors.")
+    outputs = []
+    for name, frame in (("train", train), ("validation", validation)):
+        if target_column not in frame or any(column not in frame for column in features):
+            raise FeatureRoleError(f"{name} is missing target or frozen features.")
+        y = frame[target_column].copy(deep=True)
+        if not pd.api.types.is_numeric_dtype(y) or y.isna().any() or not np.isfinite(y.to_numpy(dtype=float)).all():
+            raise FeatureRoleError(f"{name} target must be complete, numeric, and finite.")
+        x = frame.loc[:, features].copy(deep=True)
+        outputs.extend((x, y))
+    return RegressionPartitionRoles(*outputs)
+
+
+def build_regression_scoring_contract() -> dict[str, Any]:
+    return {"mae": "neg_mean_absolute_error", "rmse": "neg_root_mean_squared_error",
+            "r2": "r2", "medae": "neg_median_absolute_error"}
+
+
+def build_regression_cross_validation() -> KFold:
+    return KFold(n_splits=5, shuffle=True, random_state=42)
+
+
+def describe_regression_cv_folds(*, cv: KFold, x: pd.DataFrame, y: pd.Series) -> list[dict[str, Any]]:
+    rows = []
+    for fold, (train_idx, validation_idx) in enumerate(cv.split(x), 1):
+        row = {"fold": fold, "train_rows": len(train_idx), "validation_rows": len(validation_idx),
+               "diagnostic_only": True, "used_for_fold_assignment": False,
+               "used_for_seed_selection": False}
+        for prefix, idx in (("train_target", train_idx), ("fold_validation_target", validation_idx)):
+            values = y.iloc[idx].astype(float)
+            row[prefix] = {"min": float(values.min()), "max": float(values.max()),
+                           "mean": float(values.mean()), "median": float(values.median()),
+                           "std": float(values.std(ddof=1))}
+        rows.append(row)
+    return rows
+
+
+def run_regression_model_search(*, model_id: str, family: str, pipeline: Pipeline,
+        x_train: pd.DataFrame, y_train: pd.Series, scoring: Mapping[str, Any], cv: KFold,
+        search_space: Mapping[str, Sequence[Any]], n_jobs: int = 1,
+        error_score: str = "raise") -> SearchOutcome:
+    started = time.monotonic()
+    search = GridSearchCV(clone(pipeline), dict(search_space), scoring=dict(scoring), refit="mae",
+                          cv=cv, n_jobs=n_jobs, error_score=error_score, return_train_score=False)
+    search.fit(x_train.copy(deep=True), y_train.copy(deep=True))
+    return SearchOutcome(model_id, family, "GridSearchCV", len(ParameterGrid(search_space)),
+                         time.monotonic() - started, search)
+
+
+def summarize_regression_search_results(outcome: SearchOutcome, *, n_splits: int = 5):
+    raw = outcome.cv_results
+    rows = []
+    for index, item in raw.iterrows():
+        row = {"phase": "family_search", "model_id": outcome.model_id,
+               "family": outcome.family, "candidate_index": int(index),
+               "parameters": canonical_json_text(item["params"]).strip(),
+               "rank_mae": int(item["rank_test_mae"])}
+        for logical in ("mae", "rmse", "r2", "medae"):
+            sign = 1.0 if logical == "r2" else -1.0
+            row[f"mean_cv_{logical}"] = float(sign * item[f"mean_test_{logical}"])
+            row[f"std_cv_{logical}"] = float(item[f"std_test_{logical}"])
+            for fold in range(n_splits):
+                row[f"fold_{fold + 1}_{logical}"] = float(sign * item[f"split{fold}_test_{logical}"])
+        rows.append(row)
+    table = pd.DataFrame(rows).sort_values("candidate_index").reset_index(drop=True)
+    best = table.loc[table["rank_mae"].idxmin()]
+    summary = {"model_id": outcome.model_id, "family": outcome.family,
+               "candidate_count": outcome.candidate_count,
+               "number_of_fits": outcome.candidate_count * n_splits,
+               "best_parameters": outcome.best_parameters}
+    for metric in ("mae", "rmse", "r2", "medae"):
+        summary[f"cv_{metric}_mean"] = float(best[f"mean_cv_{metric}"])
+        summary[f"cv_{metric}_std"] = float(best[f"std_cv_{metric}"])
+    return summary, table
+
+
+def compute_regression_metrics(y_true: Sequence[float], predictions: Sequence[float]) -> dict[str, float]:
+    truth, pred = np.asarray(y_true, dtype=float), np.asarray(predictions, dtype=float)
+    if truth.shape != pred.shape or truth.ndim != 1 or not np.isfinite(truth).all() or not np.isfinite(pred).all():
+        raise ValueError("Regression truth and predictions must be aligned finite vectors.")
+    residuals = truth - pred
+    absolute = np.abs(residuals)
+    return {"mae": float(mean_absolute_error(truth, pred)),
+            "rmse": float(mean_squared_error(truth, pred) ** 0.5),
+            "r2": float(r2_score(truth, pred)), "medae": float(median_absolute_error(truth, pred)),
+            "residual_mean": float(residuals.mean()),
+            "residual_standard_deviation": float(residuals.std(ddof=1)) if len(residuals) > 1 else 0.0,
+            "max_absolute_error": float(absolute.max()), "absolute_error_p50": float(np.quantile(absolute, .5)),
+            "absolute_error_p90": float(np.quantile(absolute, .9)), "absolute_error_p95": float(np.quantile(absolute, .95))}
+
+
+def evaluate_regression_estimator(*, estimator: BaseEstimator, x: pd.DataFrame,
+                                  y_true: pd.Series) -> dict[str, Any]:
+    predictions = np.asarray(estimator.predict(x.copy(deep=True)), dtype=float)
+    truth = y_true.to_numpy(dtype=float, copy=True)
+    return {"metrics": compute_regression_metrics(truth, predictions),
+            "predictions": predictions.tolist(), "residuals": (truth - predictions).tolist(),
+            "absolute_errors": np.abs(truth - predictions).tolist()}
+
+
+def select_regression_candidate_model(*, cv_summaries: Mapping[str, Mapping[str, Any]],
+        validation_evaluations: Mapping[str, Mapping[str, Any]],
+        baseline_validation_metrics: Mapping[str, float], practical_tie_tolerance: float) -> dict[str, Any]:
+    baseline = float(baseline_validation_metrics["mae"])
+    ranking = []
+    for model_id in sorted(validation_evaluations):
+        metrics = validation_evaluations[model_id].get("metrics", validation_evaluations[model_id])
+        improvement = baseline - float(metrics["mae"])
+        eligible = improvement > max(np.finfo(float).eps * max(1.0, abs(baseline)), 0.0)
+        ranking.append({"model_id": model_id, "family": cv_summaries[model_id]["family"],
+                        "validation_mae": float(metrics["mae"]), "validation_rmse": float(metrics["rmse"]),
+                        "validation_medae": float(metrics["medae"]), "validation_r2": float(metrics["r2"]),
+                        "cv_mae_std": float(cv_summaries[model_id]["cv_mae_std"]), "eligible": eligible,
+                        "absolute_mae_improvement_over_baseline": improvement,
+                        "relative_mae_improvement_percent": 100.0 * improvement / baseline})
+    eligible_rows = [row for row in ranking if row["eligible"]]
+    if not eligible_rows:
+        raise NoEligibleCandidateError("No candidate strictly improves validation MAE over dummy_median.")
+    best_mae = min(row["validation_mae"] for row in eligible_rows)
+    finalists = [row for row in eligible_rows if row["validation_mae"] <= best_mae + practical_tie_tolerance]
+    finalists.sort(key=lambda r: (r["validation_rmse"], r["validation_medae"], r["cv_mae_std"],
+                                  -r["validation_r2"], r["model_id"]))
+    selected = finalists[0]
+    return {"ranking": sorted(ranking, key=lambda r: (r["validation_mae"], r["model_id"])),
+            "practical_tie": len(finalists) > 1, "finalists": [r["model_id"] for r in finalists],
+            "criteria_applied": ["validation_rmse", "validation_medae", "cv_mae_std",
+                                 "validation_r2_desc", "model_id_lexicographic"] if len(finalists) > 1 else ["validation_mae"],
+            "selected_model_id": selected["model_id"], "selected_model_family": selected["family"],
+            "selection_rationale": "Eligible candidates were ranked by validation MAE and the predeclared deterministic practical-tie rule."}
+
+
+def analyze_regression_repeated_profile_sensitivity(*, train_features: pd.DataFrame,
+        validation_features: pd.DataFrame, y_validation: pd.Series,
+        predictions: Sequence[float]) -> dict[str, Any]:
+    train_keys = set(map(tuple, train_features.to_numpy().tolist()))
+    repeated = np.array([tuple(row) in train_keys for row in validation_features.to_numpy().tolist()])
+    full = compute_regression_metrics(y_validation, predictions)
+    result = {"diagnostic_only": True, "used_for_selection": False,
+              "proven_duplicate_identity": False,
+              "interpretation": "Repeated-profile evidence does not prove duplicate identity or leakage.",
+              "validation_row_count": int(len(repeated)), "repeated_profile_validation_row_count": int(repeated.sum()),
+              "non_repeated_validation_row_count": int((~repeated).sum()), "full_validation_metrics": full}
+    result["excluding_repeated_profiles"] = ({"status": "computed", "metrics": compute_regression_metrics(
+        y_validation.to_numpy()[~repeated], np.asarray(predictions)[~repeated])} if (~repeated).sum() >= 2
+        else {"status": "insufficient_rows_for_stable_subset_metric"})
+    return result
+
+
+def analyze_regression_target_extreme_sensitivity(*, y_train: pd.Series, y_validation: pd.Series,
+        predictions: Sequence[float]) -> dict[str, Any]:
+    q1, q3 = np.quantile(y_train.to_numpy(dtype=float), [.25, .75]); iqr = q3 - q1
+    lower, upper = float(q1 - 1.5 * iqr), float(q3 + 1.5 * iqr)
+    truth, pred = y_validation.to_numpy(dtype=float), np.asarray(predictions, dtype=float)
+    extreme = (truth < lower) | (truth > upper)
+    def subset(mask):
+        return ({"status": "computed", "row_count": int(mask.sum()), "metrics": compute_regression_metrics(truth[mask], pred[mask])}
+                if mask.sum() >= 2 else {"status": "insufficient_rows_for_stable_subset_metric", "row_count": int(mask.sum())})
+    return {"diagnostic_only": True, "used_for_selection": False,
+            "train_derived_q1": float(q1), "train_derived_q3": float(q3), "train_derived_iqr": float(iqr),
+            "train_derived_lower_fence": lower, "train_derived_upper_fence": upper,
+            "validation_extreme_row_count": int(extreme.sum()),
+            "validation_non_extreme_row_count": int((~extreme).sum()),
+            "full_validation_metrics": compute_regression_metrics(truth, pred),
+            "excluding_train_defined_extremes": subset(~extreme), "extreme_rows": subset(extreme)}
+
+
+def write_regression_model_selection_artifacts(*, output_directory: str | Path,
+        artifacts: Mapping[str, Any], overwrite: bool = False) -> ArtifactWriteResult:
+    output = Path(output_directory)
+    if set(artifacts) != set(REGRESSION_ARTIFACT_FILENAMES):
+        raise ModelSelectionContractError("Exactly the six regression v3 artifacts are required.")
+    payloads = {name: (_deepcopy(value) if name.endswith(".json") else value.copy(deep=True))
+                for name, value in artifacts.items()}
+    for name, (schema, kind) in _REGRESSION_SCHEMAS.items():
+        if payloads[name].get("schema_version") != schema or payloads[name].get("artifact_type") != kind:
+            raise ModelSelectionContractError(f"Invalid regression artifact contract: {name}")
+    csv_required = {"phase", "model_id", "family", "candidate_index", "parameters", "rank_mae",
+                    "mean_cv_mae", "std_cv_mae", "mean_cv_rmse", "std_cv_rmse",
+                    "mean_cv_r2", "std_cv_r2", "mean_cv_medae", "std_cv_medae"}
+    if not csv_required.issubset(payloads["cross-validation-results.csv"].columns):
+        raise ModelSelectionContractError("Regression CV results columns are incomplete.")
+    staging = Path(tempfile.mkdtemp(prefix="regression-model-selection-")); promoted=[]; backups=[]
+    try:
+        stage = staging / "new"; backup = staging / "backup"; stage.mkdir(); backup.mkdir()
+        # Fingerprints are derived before writing the manifest.
+        for name in REGRESSION_ARTIFACT_FILENAMES[1:]:
+            content = _render_artifact(name, payloads[name]); (stage / name).write_bytes(content)
+        manifest = payloads["model-selection-manifest.json"]
+        manifest["artifact_fingerprints"] = {name: {"byte_sha256": sha256_file(stage/name),
+            "semantic_sha256": _semantic_fingerprint_value(name, _load_artifact(stage/name))}
+            for name in REGRESSION_ARTIFACT_FILENAMES[1:]}
+        base = _deepcopy(manifest); base.pop("self_semantic_sha256", None)
+        manifest["self_semantic_sha256"] = semantic_fingerprint_json(base)
+        (stage / REGRESSION_ARTIFACT_FILENAMES[0]).write_bytes(_render_artifact(REGRESSION_ARTIFACT_FILENAMES[0], manifest))
+        output.mkdir(parents=True, exist_ok=True)
+        present = {name: (output/name).exists() for name in REGRESSION_ARTIFACT_FILENAMES}
+        divergent = [name for name in REGRESSION_ARTIFACT_FILENAMES if present[name] and
+                     not _semantic_equivalent(name, _load_artifact(output/name), _load_artifact(stage/name))]
+        manifest_only_metadata_difference = (
+            divergent == ["model-selection-manifest.json"]
+            and all(present.values())
+        )
+        # The manifest is an index over the five scientific components.  When
+        # every component is semantically equivalent, retain the existing
+        # internally consistent set even if runtime/index metadata changed.
+        # Any component-level divergence still fails closed below.
+        if divergent and not overwrite and not manifest_only_metadata_difference:
+            raise ArtifactConflictError("Existing regression artifacts are semantically divergent: " + ", ".join(divergent))
+        if all(present.values()) and (not divergent or manifest_only_metadata_difference):
+            return ArtifactWriteResult(output, (), (), True,
+                {n: sha256_file(output/n) for n in REGRESSION_ARTIFACT_FILENAMES},
+                {n: _semantic_fingerprint_value(n, _load_artifact(output/n)) for n in REGRESSION_ARTIFACT_FILENAMES})
+        for name in REGRESSION_ARTIFACT_FILENAMES:
+            if (output/name).exists(): os.replace(output/name, backup/name); backups.append(name)
+            os.replace(stage/name, output/name); promoted.append(name)
+        return ArtifactWriteResult(output, tuple(n for n in promoted if not present[n]),
+            tuple(n for n in promoted if present[n]), False,
+            {n: sha256_file(output/n) for n in REGRESSION_ARTIFACT_FILENAMES},
+            {n: _semantic_fingerprint_value(n, _load_artifact(output/n)) for n in REGRESSION_ARTIFACT_FILENAMES})
+    except Exception:
+        for name in reversed(promoted):
+            if (output/name).exists(): (output/name).unlink()
+        for name in reversed(backups): os.replace(staging/"backup"/name, output/name)
+        raise
+    finally: shutil.rmtree(staging, ignore_errors=True)
+
+
+def _load_and_validate_regression_model_selection_handoff(*, project_root: str | Path,
+        handoff_path: str | Path) -> dict[str, Any]:
+    root = Path(project_root).resolve(); relative = _require_relative_path(handoff_path, field="handoff_path")
+    path = (root/relative).resolve()
+    if not path.is_file(): raise FileNotFoundError(f"Model-selection handoff not found: {relative}")
+    payload = json.loads(path.read_text())
+    required = {"schema_version": "model-selection-handoff.v3", "artifact_type": "model_selection_handoff",
+                "problem_type": "continuous_regression", "primary_metric": "mae",
+                "primary_metric_direction": "lower_is_better", "selected_feature_policy": "all_features",
+                "test_partition_sealed": True, "test_partition_evaluated": False,
+                "final_model_training_ready": True, "final_model_trained": False,
+                "model_artifact": None, "model_artifact_materialized": False,
+                "bundle": None, "model_bundle_materialized": False}
+    for key, expected in required.items():
+        if payload.get(key) != expected: raise ModelSelectionHandoffError(f"Invalid regression handoff field: {key}")
+    _validate_paths_recursively(payload)
+    directory = path.parent; manifest = json.loads((directory/REGRESSION_ARTIFACT_FILENAMES[0]).read_text())
+    if manifest.get("schema_version") != "model-selection-manifest.v3" or manifest.get("dataset_slug") != payload.get("dataset_slug"):
+        raise ModelSelectionHandoffError("Regression manifest contract mismatch.")
+    base = _deepcopy(manifest); expected_self = base.pop("self_semantic_sha256", None)
+    if semantic_fingerprint_json(base) != expected_self: raise ModelSelectionHandoffError("Manifest semantic fingerprint mismatch.")
+    for name in REGRESSION_ARTIFACT_FILENAMES[1:]:
+        expected = manifest.get("artifact_fingerprints", {}).get(name, {})
+        if not (directory/name).is_file() or sha256_file(directory/name) != expected.get("byte_sha256"):
+            raise ModelSelectionHandoffError(f"Artifact byte fingerprint mismatch: {name}")
+        if _semantic_fingerprint_value(name, _load_artifact(directory/name)) != expected.get("semantic_sha256"):
+            raise ModelSelectionHandoffError(f"Artifact semantic fingerprint mismatch: {name}")
+    candidates = json.loads((directory/"candidate-results.json").read_text())
+    validation = json.loads((directory/"validation-evidence.json").read_text())
+    if candidates.get("selection", {}).get("selected_model_id") != payload.get("selected_model_id"):
+        raise ModelSelectionHandoffError("Selected candidate mismatch.")
+    if payload.get("selected_model_id") not in validation.get("models", {}):
+        raise ModelSelectionHandoffError("Selected validation evidence is missing.")
+    prep_ref = payload.get("preparation_handoff_reference", {}); prep_path = prep_ref.get("path")
+    if not isinstance(prep_path, str) or sha256_file(root/_require_relative_path(prep_path, field="preparation_handoff_reference.path")) != prep_ref.get("sha256"):
+        raise ModelSelectionHandoffError("Preparation handoff fingerprint mismatch.")
+    from scripts.prepare_data import load_and_validate_preparation_handoff
+    prep = load_and_validate_preparation_handoff(project_root=root, preparation_handoff_path=prep_path)
+    feature, split = prep.manifests["feature_manifest"], prep.manifests["split_manifest"]
+    target = payload.get("target_contract", {})
+    if feature.get("problem_type") != "continuous_regression" or target.get("column") != feature.get("target_column") or target.get("semantics") != feature.get("target_contract", {}).get("semantics") or target.get("unit") != feature.get("target_contract", {}).get("unit"):
+        raise ModelSelectionHandoffError("Target contract differs from preparation.")
+    if payload.get("available_feature_columns") != feature.get("feature_columns") or payload.get("selected_feature_columns") != feature.get("feature_columns"):
+        raise ModelSelectionHandoffError("Feature order differs from preparation.")
+    hashes = payload.get("preparation_artifact_hashes", {})
+    for part in ("train", "validation"):
+        if hashes.get(f"{part}_sha256") != split["partition_sha256"][part]: raise ModelSelectionHandoffError(f"{part} hash mismatch.")
+    if hashes.get("test_sha256_integrity_reference_only") != split["partition_sha256"]["test"]: raise ModelSelectionHandoffError("Test hash mismatch.")
+    component_fields = {
+        "preparation_manifest": "preparation_manifest_sha256",
+        "feature_manifest": "feature_manifest_sha256",
+        "split_manifest": "split_manifest_sha256",
+        "quality_evidence": "quality_evidence_sha256",
+    }
+    prep_handoff = prep.manifests["preparation_handoff"]
+    for component, field in component_fields.items():
+        if hashes.get(field) != prep_handoff.get("components", {}).get(component, {}).get("sha256"):
+            raise ModelSelectionHandoffError(f"Preparation component hash mismatch: {component}")
+    instructions = payload.get("final_training_instructions", {})
+    expected_instructions = {
+        "notebook": "notebooks/04_final_model_and_bundle.ipynb",
+        "reconstruct_pipeline_from_contract": True,
+        "fit_partitions": ["train", "validation"],
+        "final_evaluation_partition": "test",
+        "access_test_only_after_contract_freeze_and_final_fit": True,
+        "evaluate_test_once": True,
+        "do_not_retune": True,
+        "do_not_change_feature_policy": True,
+        "do_not_change_hyperparameters": True,
+        "do_not_change_preprocessing": True,
+        "target_scale": "original MPa scale",
+        "prediction_type": "continuous_numeric",
+    }
+    if instructions != expected_instructions:
+        raise ModelSelectionHandoffError("Final-training instructions are incomplete or divergent.")
+    readiness = payload.get("readiness", {})
+    true_flags = ("preparation_handoff_validated", "frozen_partitions_respected",
+                  "regression_cv_completed", "candidate_models_evaluated",
+                  "feature_policy_frozen", "selected_candidate_frozen",
+                  "regression_metric_contract_frozen", "model_selection_handoff_reloadable",
+                  "test_partition_sealed", "final_model_training_ready")
+    false_flags = ("test_partition_evaluated", "final_model_trained",
+                   "model_artifact_materialized", "model_bundle_materialized",
+                   "operational_modeling_ready")
+    if any(readiness.get(key) is not True for key in true_flags) or any(
+        readiness.get(key) is not False for key in false_flags
+    ):
+        raise ModelSelectionHandoffError("Regression readiness contract is inconsistent.")
+    return _deepcopy(payload)
+
+
+_load_and_validate_model_selection_handoff_v1_v2 = load_and_validate_model_selection_handoff
+
+
+def load_and_validate_model_selection_handoff(*, project_root: str | Path,
+        handoff_path: str | Path) -> dict[str, Any]:
+    root = Path(project_root).resolve(); relative = _require_relative_path(handoff_path, field="handoff_path")
+    path = root/relative
+    if not path.is_file(): raise FileNotFoundError(f"Model-selection handoff not found: {relative}")
+    schema = json.loads(path.read_text()).get("schema_version")
+    if schema == "model-selection-handoff.v3":
+        return _load_and_validate_regression_model_selection_handoff(project_root=root, handoff_path=relative)
+    return _load_and_validate_model_selection_handoff_v1_v2(project_root=root, handoff_path=relative)
+
+
+__all__.extend(["REGRESSION_ARTIFACT_FILENAMES", "RegressionPartitionRoles",
+    "validate_regression_model_selection_contract", "validate_regression_feature_partition_roles",
+    "build_regression_scoring_contract", "build_regression_cross_validation", "describe_regression_cv_folds",
+    "run_regression_model_search", "summarize_regression_search_results", "compute_regression_metrics",
+    "evaluate_regression_estimator", "select_regression_candidate_model",
+    "analyze_regression_repeated_profile_sensitivity", "analyze_regression_target_extreme_sensitivity",
+    "write_regression_model_selection_artifacts"])
