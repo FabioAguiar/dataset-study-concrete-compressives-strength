@@ -1,0 +1,856 @@
+{
+  "artifact_type": "final_test_evidence",
+  "class_counts": {
+    "BARBUNYA": 199,
+    "BOMBAY": 78,
+    "CALI": 244,
+    "DERMASON": 532,
+    "HOROZ": 289,
+    "SEKER": 304,
+    "SIRA": 396
+  },
+  "confusion_matrix": {
+    "class_order": [
+      "SEKER",
+      "BARBUNYA",
+      "BOMBAY",
+      "CALI",
+      "DERMASON",
+      "HOROZ",
+      "SIRA"
+    ],
+    "counts": [
+      [
+        291,
+        0,
+        0,
+        0,
+        8,
+        0,
+        5
+      ],
+      [
+        3,
+        178,
+        0,
+        12,
+        0,
+        2,
+        4
+      ],
+      [
+        0,
+        0,
+        78,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        7,
+        0,
+        233,
+        0,
+        3,
+        0
+      ],
+      [
+        9,
+        0,
+        0,
+        0,
+        503,
+        2,
+        18
+      ],
+      [
+        0,
+        1,
+        0,
+        3,
+        1,
+        277,
+        7
+      ],
+      [
+        7,
+        1,
+        0,
+        0,
+        40,
+        4,
+        344
+      ]
+    ],
+    "row_normalized": [
+      [
+        0.9572368421052632,
+        0.0,
+        0.0,
+        0.0,
+        0.02631578947368421,
+        0.0,
+        0.01644736842105263
+      ],
+      [
+        0.01507537688442211,
+        0.8944723618090452,
+        0.0,
+        0.06030150753768844,
+        0.0,
+        0.010050251256281407,
+        0.020100502512562814
+      ],
+      [
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.004098360655737705,
+        0.028688524590163935,
+        0.0,
+        0.9549180327868853,
+        0.0,
+        0.012295081967213115,
+        0.0
+      ],
+      [
+        0.016917293233082706,
+        0.0,
+        0.0,
+        0.0,
+        0.9454887218045113,
+        0.0037593984962406013,
+        0.03383458646616541
+      ],
+      [
+        0.0,
+        0.0034602076124567475,
+        0.0,
+        0.010380622837370242,
+        0.0034602076124567475,
+        0.9584775086505191,
+        0.02422145328719723
+      ],
+      [
+        0.017676767676767676,
+        0.0025252525252525255,
+        0.0,
+        0.0,
+        0.10101010101010101,
+        0.010101010101010102,
+        0.8686868686868687
+      ]
+    ]
+  },
+  "confusion_pair_comparison": {
+    "focal_pair_comparisons": [
+      {
+        "class_pair": [
+          "DERMASON",
+          "SIRA"
+        ],
+        "mutual_confusion_count_delta_test_minus_validation": -10,
+        "pattern_direction": "weakened",
+        "ranking_changed": false,
+        "test": {
+          "class_pair": [
+            "DERMASON",
+            "SIRA"
+          ],
+          "left_to_right_count": 18,
+          "mutual_confusion_count": 58,
+          "mutual_row_normalized_rate": 0.13484468747626643,
+          "rank": 1,
+          "right_to_left_count": 40
+        },
+        "validation": {
+          "class_pair": [
+            "DERMASON",
+            "SIRA"
+          ],
+          "left_to_right_count": 32,
+          "mutual_confusion_count": 68,
+          "mutual_row_normalized_rate": 0.15128961644617872,
+          "rank": 1,
+          "right_to_left_count": 36
+        }
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "CALI"
+        ],
+        "mutual_confusion_count_delta_test_minus_validation": -2,
+        "pattern_direction": "weakened",
+        "ranking_changed": false,
+        "test": {
+          "class_pair": [
+            "BARBUNYA",
+            "CALI"
+          ],
+          "left_to_right_count": 12,
+          "mutual_confusion_count": 19,
+          "mutual_row_normalized_rate": 0.08899003212785238,
+          "rank": 2,
+          "right_to_left_count": 7
+        },
+        "validation": {
+          "class_pair": [
+            "BARBUNYA",
+            "CALI"
+          ],
+          "left_to_right_count": 13,
+          "mutual_confusion_count": 21,
+          "mutual_row_normalized_rate": 0.09830962688105546,
+          "rank": 2,
+          "right_to_left_count": 8
+        }
+      }
+    ],
+    "interpretation_boundary": "Descriptive generalization evidence only; confusion changes do not reopen model selection.",
+    "ranked_test_pairs": [
+      {
+        "class_pair": [
+          "DERMASON",
+          "SIRA"
+        ],
+        "left_to_right_count": 18,
+        "mutual_confusion_count": 58,
+        "mutual_row_normalized_rate": 0.13484468747626643,
+        "rank": 1,
+        "right_to_left_count": 40
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "CALI"
+        ],
+        "left_to_right_count": 12,
+        "mutual_confusion_count": 19,
+        "mutual_row_normalized_rate": 0.08899003212785238,
+        "rank": 2,
+        "right_to_left_count": 7
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "DERMASON"
+        ],
+        "left_to_right_count": 8,
+        "mutual_confusion_count": 17,
+        "mutual_row_normalized_rate": 0.043233082706766915,
+        "rank": 3,
+        "right_to_left_count": 9
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "SIRA"
+        ],
+        "left_to_right_count": 5,
+        "mutual_confusion_count": 12,
+        "mutual_row_normalized_rate": 0.03412413609782031,
+        "rank": 4,
+        "right_to_left_count": 7
+      },
+      {
+        "class_pair": [
+          "HOROZ",
+          "SIRA"
+        ],
+        "left_to_right_count": 7,
+        "mutual_confusion_count": 11,
+        "mutual_row_normalized_rate": 0.03432246338820733,
+        "rank": 5,
+        "right_to_left_count": 4
+      },
+      {
+        "class_pair": [
+          "CALI",
+          "HOROZ"
+        ],
+        "left_to_right_count": 3,
+        "mutual_confusion_count": 6,
+        "mutual_row_normalized_rate": 0.022675704804583356,
+        "rank": 6,
+        "right_to_left_count": 3
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "SIRA"
+        ],
+        "left_to_right_count": 4,
+        "mutual_confusion_count": 5,
+        "mutual_row_normalized_rate": 0.02262575503781534,
+        "rank": 7,
+        "right_to_left_count": 1
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "BARBUNYA"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 3,
+        "mutual_row_normalized_rate": 0.01507537688442211,
+        "rank": 8,
+        "right_to_left_count": 3
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "HOROZ"
+        ],
+        "left_to_right_count": 2,
+        "mutual_confusion_count": 3,
+        "mutual_row_normalized_rate": 0.013510458868738154,
+        "rank": 9,
+        "right_to_left_count": 1
+      },
+      {
+        "class_pair": [
+          "DERMASON",
+          "HOROZ"
+        ],
+        "left_to_right_count": 2,
+        "mutual_confusion_count": 3,
+        "mutual_row_normalized_rate": 0.007219606108697349,
+        "rank": 10,
+        "right_to_left_count": 1
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "CALI"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 1,
+        "mutual_row_normalized_rate": 0.004098360655737705,
+        "rank": 11,
+        "right_to_left_count": 1
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "BOMBAY"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 12,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "DERMASON"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 13,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BOMBAY",
+          "CALI"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 14,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BOMBAY",
+          "DERMASON"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 15,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BOMBAY",
+          "HOROZ"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 16,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BOMBAY",
+          "SIRA"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 17,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "CALI",
+          "DERMASON"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 18,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "CALI",
+          "SIRA"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 19,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "BOMBAY"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 20,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "HOROZ"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "rank": 21,
+        "right_to_left_count": 0
+      }
+    ]
+  },
+  "dataset_slug": "dry-bean",
+  "decision_rule": "argmax_class_score_or_probability",
+  "estimator_class_order": [
+    "BARBUNYA",
+    "BOMBAY",
+    "CALI",
+    "DERMASON",
+    "HOROZ",
+    "SEKER",
+    "SIRA"
+  ],
+  "frozen_finalization_contract_fingerprint": "81e7de5f50f191d81a113e411ca2a6be9400ebb52d1307a934d20b1636f9dc1b",
+  "individual_rows_persisted": false,
+  "metrics": {
+    "accuracy": 0.9324191968658179,
+    "balanced_accuracy": 0.9398971908347276,
+    "log_loss": 0.1810239003137349,
+    "macro_f1": 0.9418353636024855,
+    "macro_recall": 0.9398971908347276,
+    "minimum_per_class_recall": 0.8686868686868687,
+    "row_count": 2042,
+    "weighted_f1": 0.9321874638643965
+  },
+  "no_post_test_adjustment": true,
+  "operational_modeling_ready": false,
+  "operational_validity": "unconfirmed",
+  "output_class_order": [
+    "SEKER",
+    "BARBUNYA",
+    "BOMBAY",
+    "CALI",
+    "DERMASON",
+    "HOROZ",
+    "SIRA"
+  ],
+  "partition": "test",
+  "partition_path": "data/processed/dry-bean/splits/stratified-70-15-15-seed-42/test.csv",
+  "partition_sha256": "5e17c1346e67cb4a786ebd11162b7e45099ded342b9de9755ab4f18f4068c175",
+  "per_class": [
+    {
+      "class": "SEKER",
+      "f1": 0.9463414634146341,
+      "precision": 0.9356913183279743,
+      "recall": 0.9572368421052632,
+      "support": 304
+    },
+    {
+      "class": "BARBUNYA",
+      "f1": 0.9222797927461139,
+      "precision": 0.9518716577540107,
+      "recall": 0.8944723618090452,
+      "support": 199
+    },
+    {
+      "class": "BOMBAY",
+      "f1": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "support": 78
+    },
+    {
+      "class": "CALI",
+      "f1": 0.9471544715447154,
+      "precision": 0.9395161290322581,
+      "recall": 0.9549180327868853,
+      "support": 244
+    },
+    {
+      "class": "DERMASON",
+      "f1": 0.9280442804428044,
+      "precision": 0.9112318840579711,
+      "recall": 0.9454887218045113,
+      "support": 532
+    },
+    {
+      "class": "HOROZ",
+      "f1": 0.9601386481802426,
+      "precision": 0.9618055555555556,
+      "recall": 0.9584775086505191,
+      "support": 289
+    },
+    {
+      "class": "SIRA",
+      "f1": 0.8888888888888888,
+      "precision": 0.91005291005291,
+      "recall": 0.8686868686868687,
+      "support": 396
+    }
+  ],
+  "probability_matrix_sha256_aggregate_only": "c2b6082c1277c6a75c517bd7a7a890176c2d61dd9b071c69074907dc68a11c05",
+  "problem_type": "multiclass_classification",
+  "repeated_profile_sensitivity": {
+    "analysis_type": "non_destructive_repeated_feature_profile_sensitivity",
+    "excluding_repeated_profile_metrics": {
+      "balanced_accuracy": 0.9395724581078024,
+      "macro_f1": 0.9415230521492097,
+      "minimum_per_class_recall": 0.8686868686868687,
+      "row_count": 2027
+    },
+    "interpretation": "Sensitivity only: the official test artifact remains complete; Repeated-profile evidence does not prove duplicate identity or leakage.",
+    "macro_f1_delta_excluding_minus_full": -0.00031231145327581533,
+    "matching_feature_columns": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "official_full_test_metrics": {
+      "balanced_accuracy": 0.9398971908347276,
+      "macro_f1": 0.9418353636024855,
+      "minimum_per_class_recall": 0.8686868686868687,
+      "row_count": 2042
+    },
+    "official_full_test_row_count": 2042,
+    "repeated_profile_test_row_count": 15,
+    "sensitivity_row_count": 2027
+  },
+  "row_count": 2042,
+  "schema_version": "final-test-evidence.v2",
+  "selected_validation_evidence": {
+    "confusion_matrix": {
+      "class_order": [
+        "SEKER",
+        "BARBUNYA",
+        "BOMBAY",
+        "CALI",
+        "DERMASON",
+        "HOROZ",
+        "SIRA"
+      ],
+      "counts": [
+        [
+          294,
+          1,
+          0,
+          0,
+          4,
+          0,
+          5
+        ],
+        [
+          1,
+          182,
+          0,
+          13,
+          0,
+          0,
+          2
+        ],
+        [
+          0,
+          0,
+          79,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          8,
+          1,
+          234,
+          0,
+          1,
+          0
+        ],
+        [
+          11,
+          0,
+          0,
+          0,
+          486,
+          3,
+          32
+        ],
+        [
+          0,
+          0,
+          0,
+          6,
+          1,
+          274,
+          8
+        ],
+        [
+          5,
+          2,
+          0,
+          0,
+          36,
+          8,
+          344
+        ]
+      ],
+      "row_normalized": [
+        [
+          0.9671052631578947,
+          0.003289473684210526,
+          0.0,
+          0.0,
+          0.013157894736842105,
+          0.0,
+          0.01644736842105263
+        ],
+        [
+          0.005050505050505051,
+          0.9191919191919192,
+          0.0,
+          0.06565656565656566,
+          0.0,
+          0.0,
+          0.010101010101010102
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.004081632653061225,
+          0.0326530612244898,
+          0.004081632653061225,
+          0.9551020408163265,
+          0.0,
+          0.004081632653061225,
+          0.0
+        ],
+        [
+          0.020676691729323307,
+          0.0,
+          0.0,
+          0.0,
+          0.9135338345864662,
+          0.005639097744360902,
+          0.06015037593984962
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.020761245674740483,
+          0.0034602076124567475,
+          0.9480968858131488,
+          0.02768166089965398
+        ],
+        [
+          0.012658227848101266,
+          0.005063291139240506,
+          0.0,
+          0.0,
+          0.09113924050632911,
+          0.020253164556962026,
+          0.8708860759493671
+        ]
+      ]
+    },
+    "metrics": {
+      "accuracy": 0.9270323212536729,
+      "balanced_accuracy": 0.9391308599307318,
+      "log_loss": 0.22517215001326799,
+      "macro_f1": 0.9378814348554879,
+      "macro_recall": 0.9391308599307318,
+      "minimum_per_class_recall": 0.8708860759493671,
+      "row_count": 2042,
+      "weighted_f1": 0.9268991730331414
+    },
+    "per_class": [
+      {
+        "class": "SEKER",
+        "f1": 0.9545454545454546,
+        "precision": 0.9423076923076923,
+        "recall": 0.9671052631578947,
+        "support": 304
+      },
+      {
+        "class": "BARBUNYA",
+        "f1": 0.9309462915601023,
+        "precision": 0.9430051813471503,
+        "recall": 0.9191919191919192,
+        "support": 198
+      },
+      {
+        "class": "BOMBAY",
+        "f1": 0.9937106918238994,
+        "precision": 0.9875,
+        "recall": 1.0,
+        "support": 79
+      },
+      {
+        "class": "CALI",
+        "f1": 0.9397590361445783,
+        "precision": 0.924901185770751,
+        "recall": 0.9551020408163265,
+        "support": 245
+      },
+      {
+        "class": "DERMASON",
+        "f1": 0.9178470254957507,
+        "precision": 0.9222011385199241,
+        "recall": 0.9135338345864662,
+        "support": 532
+      },
+      {
+        "class": "HOROZ",
+        "f1": 0.9530434782608695,
+        "precision": 0.958041958041958,
+        "recall": 0.9480968858131488,
+        "support": 289
+      },
+      {
+        "class": "SIRA",
+        "f1": 0.8753180661577609,
+        "precision": 0.8797953964194374,
+        "recall": 0.8708860759493671,
+        "support": 395
+      }
+    ]
+  },
+  "test_loaded_only_after_final_fit": true,
+  "test_partition_evaluation_count": 1,
+  "test_probability_evaluation_count": 1,
+  "test_used_for_feature_selection": false,
+  "test_used_for_hyperparameter_selection": false,
+  "test_used_for_imbalance_policy_selection": false,
+  "test_used_for_model_selection": false,
+  "test_used_for_preprocessing_selection": false,
+  "validation_to_test": {
+    "aggregate_deltas": {
+      "accuracy_test_minus_validation": 0.0053868756121450145,
+      "balanced_accuracy_test_minus_validation": 0.0007663309039958044,
+      "log_loss_test_minus_validation": -0.0441482496995331,
+      "macro_f1_test_minus_validation": 0.003953928746997626,
+      "macro_recall_test_minus_validation": 0.0007663309039958044,
+      "weighted_f1_test_minus_validation": 0.005288290831255149
+    },
+    "interpretation": "Descriptive comparison only; no pass/fail gate or post-test adjustment.",
+    "per_class_recall": [
+      {
+        "class": "SEKER",
+        "recall_delta_test_minus_validation": -0.009868421052631526,
+        "test_recall": 0.9572368421052632,
+        "validation_recall": 0.9671052631578947
+      },
+      {
+        "class": "BARBUNYA",
+        "recall_delta_test_minus_validation": -0.024719557382874013,
+        "test_recall": 0.8944723618090452,
+        "validation_recall": 0.9191919191919192
+      },
+      {
+        "class": "BOMBAY",
+        "recall_delta_test_minus_validation": 0.0,
+        "test_recall": 1.0,
+        "validation_recall": 1.0
+      },
+      {
+        "class": "CALI",
+        "recall_delta_test_minus_validation": -0.00018400802944129602,
+        "test_recall": 0.9549180327868853,
+        "validation_recall": 0.9551020408163265
+      },
+      {
+        "class": "DERMASON",
+        "recall_delta_test_minus_validation": 0.03195488721804507,
+        "test_recall": 0.9454887218045113,
+        "validation_recall": 0.9135338345864662
+      },
+      {
+        "class": "HOROZ",
+        "recall_delta_test_minus_validation": 0.01038062283737029,
+        "test_recall": 0.9584775086505191,
+        "validation_recall": 0.9480968858131488
+      },
+      {
+        "class": "SIRA",
+        "recall_delta_test_minus_validation": -0.002199207262498337,
+        "test_recall": 0.8686868686868687,
+        "validation_recall": 0.8708860759493671
+      }
+    ],
+    "selection_reopened": false,
+    "test_worst_recall": 0.8686868686868687,
+    "test_worst_recall_class": "SIRA",
+    "validation_worst_recall": 0.8708860759493671,
+    "validation_worst_recall_class": "SIRA"
+  }
+}

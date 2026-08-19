@@ -1,0 +1,619 @@
+{
+  "artifact_type": "selection_analysis",
+  "confirmed_derived_feature_ablation": {
+    "all_features": {
+      "candidate_id": "hist_gradient_boosting__all_features",
+      "cv_macro_f1_mean": 0.9370121385632876,
+      "cv_macro_f1_std": 0.0038247869053157375,
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor2",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "feature_count": 16,
+      "feature_policy": "all_features",
+      "validation_balanced_accuracy": 0.9391308599307318,
+      "validation_macro_f1": 0.9378814348554879,
+      "validation_minimum_per_class_recall": 0.8708860759493671
+    },
+    "complexity_implication": "Nine reproducible derived columns are omitted only if the reduced policy is competitive under the declared selection rule.",
+    "confirmed_derived_features_removed": [
+      "AspectRatio",
+      "Eccentricity",
+      "EquivDiameter",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "validation_macro_f1_delta_reduced_minus_all": -0.017925390699034427,
+    "without_confirmed_derived": {
+      "candidate_id": "hist_gradient_boosting__without_confirmed_derived",
+      "cv_macro_f1_mean": 0.9183019179406531,
+      "cv_macro_f1_std": 0.004924224202905914,
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "ConvexArea",
+        "Extent",
+        "ShapeFactor2"
+      ],
+      "feature_count": 7,
+      "feature_policy": "without_confirmed_derived",
+      "validation_balanced_accuracy": 0.9209089382588139,
+      "validation_macro_f1": 0.9199560441564535,
+      "validation_minimum_per_class_recall": 0.8585858585858586
+    }
+  },
+  "dataset_slug": "dry-bean",
+  "feature_policy": {
+    "hypothesis_id": "HYP-001",
+    "policies": [
+      {
+        "candidate_id": "hist_gradient_boosting__all_features",
+        "cv_macro_f1_mean": 0.9370121385632876,
+        "cv_macro_f1_std": 0.0038247869053157375,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 16,
+        "feature_policy": "all_features",
+        "validation_balanced_accuracy": 0.9391308599307318,
+        "validation_macro_f1": 0.9378814348554879,
+        "validation_minimum_per_class_recall": 0.8708860759493671
+      },
+      {
+        "candidate_id": "hist_gradient_boosting__without_confirmed_derived",
+        "cv_macro_f1_mean": 0.9183019179406531,
+        "cv_macro_f1_std": 0.004924224202905914,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "ConvexArea",
+          "Extent",
+          "ShapeFactor2"
+        ],
+        "feature_count": 7,
+        "feature_policy": "without_confirmed_derived",
+        "validation_balanced_accuracy": 0.9209089382588139,
+        "validation_macro_f1": 0.9199560441564535,
+        "validation_minimum_per_class_recall": 0.8585858585858586
+      },
+      {
+        "candidate_id": "hist_gradient_boosting__without_shape_factor_2",
+        "cv_macro_f1_mean": 0.9361673662790764,
+        "cv_macro_f1_std": 0.004014395771272498,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 15,
+        "feature_policy": "without_shape_factor_2",
+        "validation_balanced_accuracy": 0.9381462280952386,
+        "validation_macro_f1": 0.936677022246986,
+        "validation_minimum_per_class_recall": 0.8632911392405064
+      },
+      {
+        "candidate_id": "logistic_regression__all_features",
+        "cv_macro_f1_mean": 0.9350306225351419,
+        "cv_macro_f1_std": 0.000995590911334026,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 16,
+        "feature_policy": "all_features",
+        "validation_balanced_accuracy": 0.9309075506559733,
+        "validation_macro_f1": 0.9289726887818729,
+        "validation_minimum_per_class_recall": 0.8632911392405064
+      },
+      {
+        "candidate_id": "logistic_regression__without_confirmed_derived",
+        "cv_macro_f1_mean": 0.9199408569203312,
+        "cv_macro_f1_std": 0.002834555538225011,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "ConvexArea",
+          "Extent",
+          "ShapeFactor2"
+        ],
+        "feature_count": 7,
+        "feature_policy": "without_confirmed_derived",
+        "validation_balanced_accuracy": 0.9147902609270313,
+        "validation_macro_f1": 0.9154058922135254,
+        "validation_minimum_per_class_recall": 0.8383838383838383
+      },
+      {
+        "candidate_id": "logistic_regression__without_shape_factor_2",
+        "cv_macro_f1_mean": 0.9348602281671351,
+        "cv_macro_f1_std": 0.0014216194856729845,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 15,
+        "feature_policy": "without_shape_factor_2",
+        "validation_balanced_accuracy": 0.9308144154671876,
+        "validation_macro_f1": 0.9289169346846183,
+        "validation_minimum_per_class_recall": 0.8607594936708861
+      }
+    ],
+    "selected_features": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "selected_policy": "all_features",
+    "status": "supported"
+  },
+  "imbalance_policy": {
+    "baseline_resampling": "none",
+    "class_weight_options_evaluated": {
+      "decision_tree": [
+        null,
+        "balanced"
+      ],
+      "hist_gradient_boosting": [
+        null,
+        "balanced"
+      ],
+      "logistic_regression": [
+        null,
+        "balanced"
+      ],
+      "random_forest": [
+        null,
+        "balanced",
+        "balanced_subsample"
+      ]
+    },
+    "macro_metrics_used": true,
+    "resampling_used": false,
+    "selected_class_weight": null,
+    "selected_policy": "none",
+    "stratification_used": true,
+    "synthetic_resampling": "not_introduced_no_material_justification"
+  },
+  "overlap_hypothesis": {
+    "focal_pair": [
+      "BARBUNYA",
+      "CALI"
+    ],
+    "focal_pair_rank": 2,
+    "hypothesis_id": "HYP-002",
+    "interpretation_boundary": "Validation confusion is model-specific evidence; exploratory overlap and PCA proximity are not proof of leakage or inevitable confusion.",
+    "ranked_pairs": [
+      {
+        "class_pair": [
+          "DERMASON",
+          "SIRA"
+        ],
+        "left_to_right_count": 32,
+        "mutual_confusion_count": 68,
+        "mutual_row_normalized_rate": 0.15128961644617872,
+        "right_to_left_count": 36
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "CALI"
+        ],
+        "left_to_right_count": 13,
+        "mutual_confusion_count": 21,
+        "mutual_row_normalized_rate": 0.09830962688105546,
+        "right_to_left_count": 8
+      },
+      {
+        "class_pair": [
+          "HOROZ",
+          "SIRA"
+        ],
+        "left_to_right_count": 8,
+        "mutual_confusion_count": 16,
+        "mutual_row_normalized_rate": 0.04793482545661601,
+        "right_to_left_count": 8
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "DERMASON"
+        ],
+        "left_to_right_count": 4,
+        "mutual_confusion_count": 15,
+        "mutual_row_normalized_rate": 0.03383458646616541,
+        "right_to_left_count": 11
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "SIRA"
+        ],
+        "left_to_right_count": 5,
+        "mutual_confusion_count": 10,
+        "mutual_row_normalized_rate": 0.029105596269153898,
+        "right_to_left_count": 5
+      },
+      {
+        "class_pair": [
+          "CALI",
+          "HOROZ"
+        ],
+        "left_to_right_count": 1,
+        "mutual_confusion_count": 7,
+        "mutual_row_normalized_rate": 0.024842878327801708,
+        "right_to_left_count": 6
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "SIRA"
+        ],
+        "left_to_right_count": 2,
+        "mutual_confusion_count": 4,
+        "mutual_row_normalized_rate": 0.01516430124025061,
+        "right_to_left_count": 2
+      },
+      {
+        "class_pair": [
+          "DERMASON",
+          "HOROZ"
+        ],
+        "left_to_right_count": 3,
+        "mutual_confusion_count": 4,
+        "mutual_row_normalized_rate": 0.00909930535681765,
+        "right_to_left_count": 1
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "BARBUNYA"
+        ],
+        "left_to_right_count": 1,
+        "mutual_confusion_count": 2,
+        "mutual_row_normalized_rate": 0.008339978734715578,
+        "right_to_left_count": 1
+      },
+      {
+        "class_pair": [
+          "BOMBAY",
+          "CALI"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 1,
+        "mutual_row_normalized_rate": 0.004081632653061225,
+        "right_to_left_count": 1
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "CALI"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 1,
+        "mutual_row_normalized_rate": 0.004081632653061225,
+        "right_to_left_count": 1
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "BOMBAY"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "DERMASON"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BARBUNYA",
+          "HOROZ"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BOMBAY",
+          "DERMASON"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BOMBAY",
+          "HOROZ"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "BOMBAY",
+          "SIRA"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "CALI",
+          "DERMASON"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "CALI",
+          "SIRA"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "BOMBAY"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      },
+      {
+        "class_pair": [
+          "SEKER",
+          "HOROZ"
+        ],
+        "left_to_right_count": 0,
+        "mutual_confusion_count": 0,
+        "mutual_row_normalized_rate": 0.0,
+        "right_to_left_count": 0
+      }
+    ],
+    "status": "partially_supported"
+  },
+  "problem_type": "multiclass_classification",
+  "repeated_profile_sensitivity": {
+    "analysis_type": "non_destructive_repeated_feature_profile_sensitivity",
+    "excluding_repeated_profile_metrics": {
+      "accuracy": 0.9264560710760118,
+      "balanced_accuracy": 0.9386962969652741,
+      "log_loss": 0.22691419529040593,
+      "macro_f1": 0.9374861155459241,
+      "macro_recall": 0.9386962969652741,
+      "minimum_per_class_recall": 0.8708860759493671,
+      "row_count": 2026,
+      "weighted_f1": 0.9263198225473465
+    },
+    "interpretation": "Sensitivity only: partitions and official validation evidence are unchanged; Repeated-profile evidence does not prove duplicate identity or leakage.",
+    "macro_f1_delta_excluding_minus_full": -0.0003953193095638241,
+    "matching_feature_columns": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "official_full_validation_metrics": {
+      "accuracy": 0.9270323212536729,
+      "balanced_accuracy": 0.9391308599307318,
+      "log_loss": 0.22517215001326799,
+      "macro_f1": 0.9378814348554879,
+      "macro_recall": 0.9391308599307318,
+      "minimum_per_class_recall": 0.8708860759493671,
+      "row_count": 2042,
+      "weighted_f1": 0.9268991730331414
+    },
+    "repeated_profile_validation_row_count": 16,
+    "sensitivity_row_count": 2026,
+    "validation_row_count": 2042
+  },
+  "schema_version": "selection-analysis.v2",
+  "selection_rationale": "Candidates within the declared validation macro-F1 tolerance were resolved by balanced accuracy, worst-class recall, CV stability, comparable log loss, simplicity, and stable model ID.",
+  "shape_factor_2": {
+    "all_features": {
+      "candidate_id": "hist_gradient_boosting__all_features",
+      "cv_macro_f1_mean": 0.9370121385632876,
+      "cv_macro_f1_std": 0.0038247869053157375,
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor2",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "feature_count": 16,
+      "feature_policy": "all_features",
+      "validation_balanced_accuracy": 0.9391308599307318,
+      "validation_macro_f1": 0.9378814348554879,
+      "validation_minimum_per_class_recall": 0.8708860759493671
+    },
+    "baseline_includes_shape_factor_2": true,
+    "cv_macro_f1_delta_without_minus_all": -0.0008447722842112038,
+    "interpretation": "Predictive sensitivity does not resolve or invent source provenance.",
+    "provenance_status": "unresolved",
+    "selected_feature_policy": "all_features",
+    "validation_balanced_accuracy_delta_without_minus_all": -0.0009846318354931327,
+    "validation_macro_f1_delta_without_minus_all": -0.0012044126085019036,
+    "without_shape_factor_2": {
+      "candidate_id": "hist_gradient_boosting__without_shape_factor_2",
+      "cv_macro_f1_mean": 0.9361673662790764,
+      "cv_macro_f1_std": 0.004014395771272498,
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "feature_count": 15,
+      "feature_policy": "without_shape_factor_2",
+      "validation_balanced_accuracy": 0.9381462280952386,
+      "validation_macro_f1": 0.936677022246986,
+      "validation_minimum_per_class_recall": 0.8632911392405064
+    }
+  },
+  "test_partition_evaluated": false,
+  "tie_analysis": {
+    "finalists": [
+      "hist_gradient_boosting__all_features",
+      "hist_gradient_boosting__without_shape_factor_2"
+    ],
+    "order": [
+      "higher_validation_balanced_accuracy",
+      "higher_minimum_per_class_recall",
+      "lower_cv_macro_f1_std",
+      "lower_validation_log_loss_when_comparable",
+      "simpler_pipeline_or_model",
+      "stable_model_id"
+    ],
+    "practical_tie": true,
+    "tolerance": 0.002
+  }
+}

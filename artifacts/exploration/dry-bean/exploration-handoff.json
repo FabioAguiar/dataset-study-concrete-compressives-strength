@@ -1,0 +1,1472 @@
+{
+  "artifact_type": "exploration_handoff",
+  "continuation": {
+    "expected_outputs": [
+      {
+        "Expected output": "artifacts/preparation/dry-bean/preparation-manifest.json",
+        "Notebook": "02_data_preparation.ipynb",
+        "Purpose": "Record source identity, preparation policy, and readiness."
+      },
+      {
+        "Expected output": "artifacts/preparation/dry-bean/feature-manifest.json",
+        "Notebook": "02_data_preparation.ipynb",
+        "Purpose": "Freeze feature order, target classes, and predictor roles."
+      },
+      {
+        "Expected output": "artifacts/preparation/dry-bean/split-manifest.json",
+        "Notebook": "02_data_preparation.ipynb",
+        "Purpose": "Prove reproducible partition policy and isolation."
+      },
+      {
+        "Expected output": "artifacts/preparation/dry-bean/quality-evidence.json",
+        "Notebook": "02_data_preparation.ipynb",
+        "Purpose": "Prove post-preparation integrity and source preservation."
+      },
+      {
+        "Expected output": "artifacts/model-selection/dry-bean/model-selection-handoff.json",
+        "Notebook": "03_model_selection_and_evaluation.ipynb",
+        "Purpose": "Freeze the selected candidate and downstream evaluation contract."
+      }
+    ],
+    "fresh_kernel_required": true,
+    "next_steps": [
+      {
+        "Acceptance criterion": "Source dataset ID, file hash, row count, column order, target, and feature roles match the persisted exploration handoff.",
+        "Action": "Reload the UCI source from a fresh kernel and verify identity",
+        "Notebook": "02_data_preparation.ipynb",
+        "Sequence": 1,
+        "Status": "Ready"
+      },
+      {
+        "Acceptance criterion": "Notebook 02 does not depend on live variables from Notebook 01 and independently validates all required fields and classes.",
+        "Action": "Reconstruct and validate the source-backed contracts",
+        "Notebook": "02_data_preparation.ipynb",
+        "Sequence": 2,
+        "Status": "Ready"
+      },
+      {
+        "Acceptance criterion": "All source rows and validated values are preserved; no equality-only deduplication or generic outlier treatment is performed.",
+        "Action": "Create an unchanged defensive prepared projection",
+        "Notebook": "02_data_preparation.ipynb",
+        "Sequence": 3,
+        "Status": "Ready"
+      },
+      {
+        "Acceptance criterion": "X contains exactly the 16 declared candidate features and y contains exactly the seven nominal target classes.",
+        "Action": "Separate baseline predictors and readable multiclass target",
+        "Notebook": "02_data_preparation.ipynb",
+        "Sequence": 4,
+        "Status": "Ready"
+      },
+      {
+        "Acceptance criterion": "Train, validation, and test partitions are reproducible, disjoint, class-aware, and generated with the declared random seed.",
+        "Action": "Execute the approved stratified 70/15/15 snapshot split",
+        "Notebook": "02_data_preparation.ipynb",
+        "Sequence": 5,
+        "Status": "Ready"
+      },
+      {
+        "Acceptance criterion": "All source rows occur in exactly one partition, every class is represented, and cross-partition identical profiles are reported without being treated as proven duplicate identities.",
+        "Action": "Validate partition integrity and repeated-profile evidence",
+        "Notebook": "02_data_preparation.ipynb",
+        "Sequence": 6,
+        "Status": "Ready"
+      },
+      {
+        "Acceptance criterion": "Prepared data, feature manifest, split manifest, quality evidence, and partition artifacts are validated and reloadable by Notebook 03.",
+        "Action": "Persist the preparation handoff and seal the final test set",
+        "Notebook": "02_data_preparation.ipynb",
+        "Sequence": 7,
+        "Status": "Ready"
+      },
+      {
+        "Acceptance criterion": "Model selection never reconstructs partitions differently or fits preprocessing on validation/test data.",
+        "Action": "Load and validate the frozen preparation handoff",
+        "Notebook": "03_model_selection_and_evaluation.ipynb",
+        "Sequence": 1,
+        "Status": "Waiting on Notebook 02"
+      },
+      {
+        "Acceptance criterion": "All candidates use the same partitions and model-appropriate train-fitted pipelines.",
+        "Action": "Establish multiclass baselines and compare candidate models",
+        "Notebook": "03_model_selection_and_evaluation.ipynb",
+        "Sequence": 2,
+        "Status": "Waiting on Notebook 02"
+      },
+      {
+        "Acceptance criterion": "Class weighting, training-only resampling, regularization, and feature ablation are adopted only from held-out validation evidence.",
+        "Action": "Evaluate imbalance and redundancy alternatives",
+        "Notebook": "03_model_selection_and_evaluation.ipynb",
+        "Sequence": 3,
+        "Status": "Waiting on Notebook 02"
+      },
+      {
+        "Acceptance criterion": "Macro and per-class metrics plus confusion evidence test the exploratory overlap hypotheses without using the final test set.",
+        "Action": "Evaluate multiclass errors and class-pair overlap hypotheses",
+        "Notebook": "03_model_selection_and_evaluation.ipynb",
+        "Sequence": 4,
+        "Status": "Waiting on Notebook 02"
+      },
+      {
+        "Acceptance criterion": "Model family, preprocessing, features, hyperparameters, and all selection choices are frozen before final test access.",
+        "Action": "Freeze the candidate before one-time final-test evaluation",
+        "Notebook": "03_model_selection_and_evaluation.ipynb",
+        "Sequence": 5,
+        "Status": "Waiting on Notebook 02"
+      }
+    ],
+    "notebook_02_must_revalidate_source": true,
+    "notebook_03_must_consume_frozen_preparation_handoff": true
+  },
+  "data_quality": {
+    "duplicate_identity": {
+      "exact_duplicate_group_count": 68,
+      "exact_duplicate_row_count": 136,
+      "source_identifiers_available": false,
+      "target_conflict_group_count": 0
+    },
+    "findings": [
+      {
+        "Affected field count": 0,
+        "Affected fields": [],
+        "Blocking scope": "None",
+        "Disposition": "Monitor",
+        "Domain": "Record integrity",
+        "Finding ID": "DQ-003",
+        "Required action": "Preserve exact row matches unless independent evidence proves that they represent duplicated observations.",
+        "Severity": "Medium",
+        "Source stages": [
+          "9"
+        ],
+        "Status": "Review",
+        "Title": "Exact row matches require review because source identity is unavailable",
+        "Verification": "Any later deduplication decision cites source-identity evidence; row equality alone is not used as a deletion rule."
+      },
+      {
+        "Affected field count": 1,
+        "Affected fields": [
+          "ShapeFactor2"
+        ],
+        "Blocking scope": "Model evaluation",
+        "Disposition": "Evaluate",
+        "Domain": "Derived-feature provenance",
+        "Finding ID": "DQ-007",
+        "Required action": "Review source definitions and tolerances before relying on unconfirmed formulas for redundancy decisions.",
+        "Severity": "Medium",
+        "Source stages": [
+          "15"
+        ],
+        "Status": "Review",
+        "Title": "Declared mathematical dependencies require review",
+        "Verification": "Each dependency is either numerically confirmed or explicitly documented as requiring an unavailable primitive."
+      }
+    ],
+    "structurally_valid": true,
+    "validated_non_issues": [
+      {
+        "Affected field count": 16,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "Disposition": "No action",
+        "Domain": "Leakage governance",
+        "Evidence": "The target is excluded from candidate predictors and no deterministic target proxy or target-derived dependency was detected.",
+        "Interpretation": "Preserve target isolation in every downstream predictor matrix.",
+        "Non-issue ID": "NI-007",
+        "Source stages": [
+          "15"
+        ],
+        "Title": "No direct or deterministic target leakage was detected"
+      },
+      {
+        "Affected field count": 15,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "Disposition": "Preserve",
+        "Domain": "Numerical distribution",
+        "Evidence": "15 feature(s) contain 7139 feature-level IQR candidate occurrences.",
+        "Interpretation": "Do not remove, clip, or winsorize observations solely because the IQR rule flags them.",
+        "Non-issue ID": "NI-006",
+        "Source stages": [
+          "11"
+        ],
+        "Title": "IQR outlier candidates are not automatically invalid observations"
+      },
+      {
+        "Affected field count": 0,
+        "Affected fields": [],
+        "Disposition": "No action",
+        "Domain": "Schema and domain validity",
+        "Evidence": "No type mismatch, column-domain violation, or declared cross-column relation violation was reported.",
+        "Interpretation": "Do not introduce corrective coercions without new evidence.",
+        "Non-issue ID": "NI-001",
+        "Source stages": [
+          "7"
+        ],
+        "Title": "Source-backed types and declared domains are satisfied"
+      },
+      {
+        "Affected field count": 1,
+        "Affected fields": [
+          "Class"
+        ],
+        "Disposition": "No action",
+        "Domain": "Target integrity",
+        "Evidence": "Observed classes: 7; no missing or unexpected target values were reported.",
+        "Interpretation": "Preserve the readable nominal class labels.",
+        "Non-issue ID": "NI-004",
+        "Source stages": [
+          "10"
+        ],
+        "Title": "The multiclass target contract is complete and valid"
+      },
+      {
+        "Affected field count": 1,
+        "Affected fields": [
+          "Class"
+        ],
+        "Disposition": "Monitor",
+        "Domain": "Target support",
+        "Evidence": "Majority-to-minority ratio=6.793103448275862; normalized class entropy=0.942737050809139.",
+        "Interpretation": "Preserve all classes and carry class-support evidence into stratified splitting and multiclass evaluation.",
+        "Non-issue ID": "NI-005",
+        "Source stages": [
+          "10"
+        ],
+        "Title": "Unequal class support is a modeling condition, not a data-quality defect"
+      },
+      {
+        "Affected field count": 17,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4",
+          "Class"
+        ],
+        "Disposition": "No action",
+        "Domain": "Value quality",
+        "Evidence": "All dataset columns passed the source-backed value-quality rules.",
+        "Interpretation": "Do not add imputation or value-repair steps without new evidence.",
+        "Non-issue ID": "NI-002",
+        "Source stages": [
+          "8"
+        ],
+        "Title": "No missing, blank, inconsistent, or invalid values were detected"
+      }
+    ]
+  },
+  "dataset_slug": "dry-bean",
+  "exploratory_synthesis": {
+    "hypotheses": [
+      {
+        "Confounding risk count": 0,
+        "Confounding risks": [],
+        "Decision stage": "Model selection",
+        "Hypothesis": "A reduced or regularized feature set may match the all-feature baseline without degrading multiclass performance.",
+        "Hypothesis ID": "HYP-001",
+        "Linked insight IDs": [
+          "INS-004"
+        ],
+        "Linked insight count": 1,
+        "Required validation": "Compare all-feature, regularized, and ablated pipelines under the same cross-validation protocol.",
+        "Status": "Unvalidated",
+        "Title": "Some redundant features may add limited incremental value",
+        "Validation action count": 1
+      },
+      {
+        "Confounding risk count": 2,
+        "Confounding risks": [
+          "Model family",
+          "Decision boundary"
+        ],
+        "Decision stage": "Model evaluation",
+        "Hypothesis": "Pairs with greater exploratory profile overlap may show more mutual confusion after modeling.",
+        "Hypothesis ID": "HYP-002",
+        "Linked insight IDs": [
+          "INS-006"
+        ],
+        "Linked insight count": 1,
+        "Required validation": "Inspect repeated-validation confusion matrices and per-class precision/recall for the highest-overlap pairs.",
+        "Status": "Unvalidated",
+        "Title": "High-overlap class pairs may concentrate predictive errors",
+        "Validation action count": 1
+      }
+    ],
+    "key_insights": [
+      {
+        "Insight ID": "INS-001",
+        "Interpretation boundary": "Structural data quality does not establish predictive performance.",
+        "Modeling implication": "Restrict preparation to evidence-backed actions and preserve conditions already validated as non-issues.",
+        "Relevance": "High",
+        "Status": "Unresolved",
+        "Summary": "Stage 16 consolidated 2 findings, 1 blockers, and 6 validated non-issues.",
+        "Theme": "Data quality",
+        "Title": "Data-quality conditions require targeted review"
+      },
+      {
+        "Insight ID": "INS-002",
+        "Interpretation boundary": "Class frequency describes support, not class difficulty or model bias.",
+        "Modeling implication": "Use stratified partitions and macro/per-class metrics; do not infer a resampling requirement from class counts alone.",
+        "Relevance": "High",
+        "Status": "Observed",
+        "Summary": "The target contains 7 classes; majority=('DERMASON',), minority=('BOMBAY',), majority/minority ratio=6.7931, normalized entropy=0.9427.",
+        "Theme": "Target distribution",
+        "Title": "Multiclass support is unequal across target classes"
+      },
+      {
+        "Insight ID": "INS-004",
+        "Interpretation boundary": "Redundancy does not by itself justify feature removal before the split.",
+        "Modeling implication": "Use the complete validated feature set as a baseline, then compare regularized and ablated variants inside validation.",
+        "Relevance": "High",
+        "Status": "Observed",
+        "Summary": "21 feature pairs meet the redundancy-review threshold and 9 derived dependencies are numerically confirmed. Strongest reviewed pair=('AspectRatio', 'Eccentricity') (1.0000).",
+        "Theme": "Feature dependency",
+        "Title": "Strong associations and derived measurements create structural redundancy"
+      },
+      {
+        "Insight ID": "INS-005",
+        "Interpretation boundary": "Univariate association is not causality, incremental importance, or held-out predictive performance.",
+        "Modeling implication": "Retain the validated feature set for the baseline and evaluate incremental contribution jointly during model selection.",
+        "Relevance": "High",
+        "Status": "Observed",
+        "Summary": "16 features meet the exploratory association threshold; strongest=Area (0.9275).",
+        "Theme": "Feature-to-target association",
+        "Title": "Morphological features show measurable univariate multiclass association"
+      },
+      {
+        "Insight ID": "INS-006",
+        "Interpretation boundary": "Profile overlap and PCA proximity do not estimate classifier confusion.",
+        "Modeling implication": "Evaluate confusion matrices, macro metrics, and per-class recall because class-specific difficulty may differ.",
+        "Relevance": "High",
+        "Status": "Observed",
+        "Summary": "Greatest central overlap=BARBUNYA vs CALI (mean IQR overlap=0.4035, robust median gap=0.5154); PCA-2D coverage=81.90%.",
+        "Theme": "Class separation",
+        "Title": "Some class pairs retain substantial central-profile overlap"
+      },
+      {
+        "Insight ID": "INS-007",
+        "Interpretation boundary": "Absence of direct proxies does not replace train/validation isolation for learned transformations.",
+        "Modeling implication": "Keep target semantics isolated and preserve leakage-safe fitting rules.",
+        "Relevance": "High",
+        "Status": "Controlled",
+        "Summary": "Direct target leakage=False; target proxy candidates=0; confirmed non-target derived dependencies=9.",
+        "Theme": "Leakage governance",
+        "Title": "No direct target leakage was detected in candidate features"
+      },
+      {
+        "Insight ID": "INS-003",
+        "Interpretation boundary": "IQR candidates are statistical extremes, not proven measurement errors.",
+        "Modeling implication": "Keep raw observations and evaluate robustness or transformations only inside validated pipelines.",
+        "Relevance": "Medium",
+        "Status": "Observed",
+        "Summary": "15 features contain IQR review candidates (candidate flags=7139).",
+        "Theme": "Numerical distributions",
+        "Title": "IQR candidates occur in numerical feature distributions"
+      }
+    ],
+    "limitations": [
+      {
+        "Affected field count": 17,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4",
+          "Class"
+        ],
+        "Implication": "Correlation, eta squared, overlap, and PCA patterns cannot be reported as out-of-sample predictive performance.",
+        "Limitation ID": "LIM-001",
+        "Limitation type": "Modeling",
+        "Required resolution": "Validate predictive claims with leakage-safe cross-validation and held-out multiclass metrics.",
+        "Severity": "Contextual",
+        "Source stages": [
+          "12",
+          "13",
+          "14",
+          "17"
+        ],
+        "Status": "Accepted",
+        "Theme": "Exploratory interpretation",
+        "Title": "EDA associations do not establish classifier performance"
+      }
+    ]
+  },
+  "feature_contract": {
+    "baseline_feature_count": 16,
+    "categorical_features": [],
+    "feature_columns": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "identifier_columns": [],
+    "numerical_features": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ]
+  },
+  "leakage_and_dependencies": {
+    "confirmed_derived_dependency_count": 9,
+    "dependencies": [
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Confirmed from retained columns",
+        "Derived feature": "AspectRatio",
+        "Formula": "MajorAxisLength / MinorAxisLength",
+        "Interpretation": "The released feature is numerically reproducible from other retained features; treat it as structural redundancy, not target leakage.",
+        "Match rate": 1.0,
+        "Maximum absolute error": 1.316362130410198e-09,
+        "Maximum relative error": 8.156852035592354e-10,
+        "Source features": [
+          "MajorAxisLength",
+          "MinorAxisLength"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      },
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Confirmed from retained columns",
+        "Derived feature": "Eccentricity",
+        "Formula": "sqrt(1 - (MinorAxisLength / MajorAxisLength)^2)",
+        "Interpretation": "The released feature is numerically reproducible from other retained features; treat it as structural redundancy, not target leakage.",
+        "Match rate": 1.0,
+        "Maximum absolute error": 1.3149809019452618e-09,
+        "Maximum relative error": 6.005815522734523e-09,
+        "Source features": [
+          "MajorAxisLength",
+          "MinorAxisLength"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      },
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Confirmed from retained columns",
+        "Derived feature": "EquivDiameter",
+        "Formula": "sqrt(4 * Area / pi)",
+        "Interpretation": "The released feature is numerically reproducible from other retained features; treat it as structural redundancy, not target leakage.",
+        "Match rate": 1.0,
+        "Maximum absolute error": 4.999731118005002e-08,
+        "Maximum relative error": 2.873011749090714e-10,
+        "Source features": [
+          "Area"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      },
+      {
+        "Auditable from retained columns": false,
+        "Dependency status": "Documented; source column not retained",
+        "Derived feature": "Extent",
+        "Formula": "Area / BoundingBoxArea",
+        "Interpretation": "BoundingBoxArea is required by the source definition but is not retained.",
+        "Match rate": null,
+        "Maximum absolute error": null,
+        "Maximum relative error": null,
+        "Source features": [
+          "Area",
+          "BoundingBoxArea"
+        ],
+        "Target-derived": false,
+        "Valid rows": 0
+      },
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Confirmed from retained columns",
+        "Derived feature": "Solidity",
+        "Formula": "Area / ConvexArea",
+        "Interpretation": "The released feature is numerically reproducible from other retained features; treat it as structural redundancy, not target leakage.",
+        "Match rate": 1.0,
+        "Maximum absolute error": 4.999796132665324e-10,
+        "Maximum relative error": 5.133286621267989e-10,
+        "Source features": [
+          "Area",
+          "ConvexArea"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      },
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Confirmed from retained columns",
+        "Derived feature": "Roundness",
+        "Formula": "4 * pi * Area / Perimeter^2",
+        "Interpretation": "The released feature is numerically reproducible from other retained features; treat it as structural redundancy, not target leakage.",
+        "Match rate": 1.0,
+        "Maximum absolute error": 4.99982166779489e-10,
+        "Maximum relative error": 8.015539059669021e-10,
+        "Source features": [
+          "Area",
+          "Perimeter"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      },
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Confirmed from retained columns",
+        "Derived feature": "Compactness",
+        "Formula": "EquivDiameter / MajorAxisLength",
+        "Interpretation": "The released feature is numerically reproducible from other retained features; treat it as structural redundancy, not target leakage.",
+        "Match rate": 1.0,
+        "Maximum absolute error": 8.035149212659576e-10,
+        "Maximum relative error": 9.7551197889296e-10,
+        "Source features": [
+          "EquivDiameter",
+          "MajorAxisLength"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      },
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Confirmed from retained columns",
+        "Derived feature": "ShapeFactor1",
+        "Formula": "MajorAxisLength / Area",
+        "Interpretation": "The released feature is numerically reproducible from other retained features; treat it as structural redundancy, not target leakage.",
+        "Match rate": 1.0,
+        "Maximum absolute error": 5.009790603194286e-10,
+        "Maximum relative error": 1.6575894085721824e-07,
+        "Source features": [
+          "MajorAxisLength",
+          "Area"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      },
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Declared dependency not confirmed",
+        "Derived feature": "ShapeFactor2",
+        "Formula": "MinorAxisLength / Area",
+        "Interpretation": "The declared mathematical relationship is not reproduced at the configured tolerance and should be reviewed before relying on it.",
+        "Match rate": 0.0,
+        "Maximum absolute error": 0.0037948904125853938,
+        "Maximum relative error": 0.747578974609207,
+        "Source features": [
+          "MinorAxisLength",
+          "Area"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      },
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Confirmed from retained columns",
+        "Derived feature": "ShapeFactor3",
+        "Formula": "4 * Area / (pi * MajorAxisLength^2)",
+        "Interpretation": "The released feature is numerically reproducible from other retained features; treat it as structural redundancy, not target leakage.",
+        "Match rate": 1.0,
+        "Maximum absolute error": 8.415186325549939e-10,
+        "Maximum relative error": 1.25362747080727e-09,
+        "Source features": [
+          "Area",
+          "MajorAxisLength"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      },
+      {
+        "Auditable from retained columns": true,
+        "Dependency status": "Confirmed from retained columns",
+        "Derived feature": "ShapeFactor4",
+        "Formula": "4 * Area / (pi * MajorAxisLength * MinorAxisLength)",
+        "Interpretation": "The released feature is numerically reproducible from other retained features; treat it as structural redundancy, not target leakage.",
+        "Match rate": 1.0,
+        "Maximum absolute error": 9.64854862672837e-10,
+        "Maximum relative error": 9.688783781368639e-10,
+        "Source features": [
+          "Area",
+          "MajorAxisLength",
+          "MinorAxisLength"
+        ],
+        "Target-derived": false,
+        "Valid rows": 13611
+      }
+    ],
+    "direct_target_leakage": false,
+    "target_proxy_candidate_count": 0
+  },
+  "open_reviews": [
+    {
+      "blocking": false,
+      "continuation": "Preserve rows. During partition validation, report any cross-partition identical feature profiles as sensitivity evidence; do not silently deduplicate or regroup them.",
+      "review_id": "REV-001",
+      "summary": "68 exact-row group(s) covering 136 rows exist without an independent source identifier.",
+      "theme": "Duplicate identity"
+    },
+    {
+      "blocking": false,
+      "continuation": "Retain the affected feature(s) in the baseline and test any ablation only inside leakage-safe model selection.",
+      "review_id": "REV-002",
+      "summary": "Declared mathematical dependency not numerically confirmed for: ShapeFactor2.",
+      "theme": "Derived-feature dependency"
+    },
+    {
+      "blocking": false,
+      "continuation": "Use the complete feature set as baseline; compare regularization or ablation only on training/validation data.",
+      "review_id": "REV-003",
+      "summary": "21 feature pair(s) meet the declared redundancy-review threshold.",
+      "theme": "Feature redundancy"
+    },
+    {
+      "blocking": false,
+      "continuation": "Preserve all classes with stratification. Evaluate class weighting or training-only resampling only if validation metrics justify it.",
+      "review_id": "REV-004",
+      "summary": "Multiclass support is unequal; majority/minority ratio=6.7931, normalized entropy=0.942737",
+      "theme": "Class support"
+    },
+    {
+      "blocking": false,
+      "continuation": "Compare all-feature, regularized, and ablated pipelines under the same cross-validation protocol.",
+      "review_id": "REV-HYP-001",
+      "summary": "A reduced or regularized feature set may match the all-feature baseline without degrading multiclass performance.",
+      "theme": "Exploratory hypothesis"
+    },
+    {
+      "blocking": false,
+      "continuation": "Inspect repeated-validation confusion matrices and per-class precision/recall for the highest-overlap pairs.",
+      "review_id": "REV-HYP-002",
+      "summary": "Pairs with greater exploratory profile overlap may show more mutual confusion after modeling.",
+      "theme": "Exploratory hypothesis"
+    }
+  ],
+  "prediction_contract": {
+    "class_semantics": "Nominal / unordered",
+    "positive_class": null,
+    "problem_type": "multiclass_classification",
+    "target_classes": [
+      "SEKER",
+      "BARBUNYA",
+      "BOMBAY",
+      "CALI",
+      "DERMASON",
+      "HOROZ",
+      "SIRA"
+    ],
+    "target_column": "Class"
+  },
+  "preparation_contract": {
+    "decisions": [
+      {
+        "Acceptance criteria": "No row or value is altered by equality-only deduplication or a generic IQR rule.",
+        "Affected field count": 17,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4",
+          "Class"
+        ],
+        "Decision ID": "PREP-002",
+        "Domain": "Cleaning",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "None",
+        "Operation": "Do not drop exact row matches without independent source identity evidence; do not delete, clip, winsorize, or replace values solely because they are IQR outlier candidates.",
+        "Phase": "Before split",
+        "Prerequisite count": 0,
+        "Prerequisites": [],
+        "Rationale": "The source provides no observation identifier, while numerical extremes remain domain-valid measurements.",
+        "Source stages": [
+          "9",
+          "11",
+          "16",
+          "17"
+        ],
+        "Status": "Prohibited",
+        "Title": "Prohibit unsupported deduplication and generic outlier treatment"
+      },
+      {
+        "Acceptance criteria": "Prepared row count and values match the validated source before any split or learned transformation.",
+        "Affected field count": 17,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4",
+          "Class"
+        ],
+        "Decision ID": "PREP-001",
+        "Domain": "Cleaning",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "Deterministic",
+        "Operation": "Create a defensive prepared copy without changing values, row count, column semantics, or target labels.",
+        "Phase": "Before split",
+        "Prerequisite count": 0,
+        "Prerequisites": [],
+        "Rationale": "Source-backed type, domain, and value checks found no deterministic repair requirement.",
+        "Source stages": [
+          "7",
+          "8",
+          "16"
+        ],
+        "Status": "Approved",
+        "Title": "Preserve the validated source observations"
+      },
+      {
+        "Acceptance criteria": "Prepared y contains exactly the declared class set and X never contains the target.",
+        "Affected field count": 1,
+        "Affected fields": [
+          "Class"
+        ],
+        "Decision ID": "PREP-003",
+        "Domain": "Target governance",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "None",
+        "Operation": "Keep every declared class label readable in prepared data and exclude the target and any target derivative from predictors.",
+        "Phase": "Before split",
+        "Prerequisite count": 0,
+        "Prerequisites": [],
+        "Rationale": "All declared classes are observed and no binary positive-class semantics apply.",
+        "Source stages": [
+          "5",
+          "10",
+          "15",
+          "16"
+        ],
+        "Status": "Approved",
+        "Title": "Preserve the nominal multiclass target contract"
+      },
+      {
+        "Acceptance criteria": "Baseline X contains exactly the declared candidate features.",
+        "Affected field count": 16,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "Decision ID": "PREP-004",
+        "Domain": "Feature role",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "None",
+        "Operation": "Start downstream model evaluation with all validated numerical candidate features, including documented derived measurements.",
+        "Phase": "Before split",
+        "Prerequisite count": 0,
+        "Prerequisites": [],
+        "Rationale": "Correlation and mathematical redundancy are exploratory evidence, not sufficient grounds for global feature deletion.",
+        "Source stages": [
+          "6",
+          "12",
+          "15",
+          "17"
+        ],
+        "Status": "Approved",
+        "Title": "Use the complete validated candidate-feature set as the baseline"
+      },
+      {
+        "Acceptance criteria": "Partitions are reproducible, disjoint, preserve every target class, and keep the final test holdout untouched.",
+        "Affected field count": 1,
+        "Affected fields": [
+          "Class"
+        ],
+        "Decision ID": "PREP-005",
+        "Domain": "Dataset splitting",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "None",
+        "Operation": "Partition the validated snapshot into 70% train, 15% validation, and 15% test with stratification by Class and random seed 42.",
+        "Phase": "Split",
+        "Prerequisite count": 2,
+        "Prerequisites": [
+          "PREP-001",
+          "PREP-003"
+        ],
+        "Rationale": "The released table has no chronological evaluation field, while unequal multiclass support makes stratification important.",
+        "Source stages": [
+          "10",
+          "15",
+          "17"
+        ],
+        "Status": "Approved",
+        "Title": "Use a reproducible stratified snapshot split"
+      },
+      {
+        "Acceptance criteria": "All learned operations record train-only fit scope and the final test partition is used only after the model contract is frozen.",
+        "Affected field count": 17,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4",
+          "Class"
+        ],
+        "Decision ID": "PREP-010",
+        "Domain": "Leakage governance",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "None",
+        "Operation": "Perform the approved split before fitting scalers, selectors, resampling strategies, target-aware rankings, or model parameters.",
+        "Phase": "Split",
+        "Prerequisite count": 1,
+        "Prerequisites": [
+          "PREP-005"
+        ],
+        "Rationale": "Held-out partitions must not influence learned preparation choices.",
+        "Source stages": [
+          "15",
+          "17"
+        ],
+        "Status": "Approved",
+        "Title": "Split before every learned target-aware or distribution-aware operation"
+      },
+      {
+        "Acceptance criteria": "Any scaler is fitted on training data only; validation and test are transform-only and never refit preprocessing.",
+        "Affected field count": 16,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "Decision ID": "PREP-006",
+        "Domain": "Transformation",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "Train only",
+        "Operation": "Preserve original numerical values and fit scaling only inside candidate pipelines whose model family requires or benefits from it.",
+        "Phase": "Train-only transformation",
+        "Prerequisite count": 1,
+        "Prerequisites": [
+          "PREP-005"
+        ],
+        "Rationale": "All predictors are numerical, but scale sensitivity depends on model family.",
+        "Source stages": [
+          "7",
+          "11",
+          "15",
+          "17"
+        ],
+        "Status": "Conditional",
+        "Title": "Make numerical scaling model-dependent and train-fitted"
+      },
+      {
+        "Acceptance criteria": "Any imbalance strategy is evaluated inside training/validation; validation and test prevalence remains untouched.",
+        "Affected field count": 1,
+        "Affected fields": [
+          "Class"
+        ],
+        "Decision ID": "PREP-007",
+        "Domain": "Feature engineering",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "Evaluation only",
+        "Operation": "Use stratification as the baseline policy and compare class weighting or training-only resampling only if validation evidence shows a benefit for macro and per-class metrics.",
+        "Phase": "Model selection",
+        "Prerequisite count": 1,
+        "Prerequisites": [
+          "PREP-005"
+        ],
+        "Rationale": "Class support is unequal, but frequency alone does not justify altering the released distribution.",
+        "Source stages": [
+          "10",
+          "16",
+          "17"
+        ],
+        "Status": "Deferred",
+        "Title": "Defer class-imbalance mitigation to model selection"
+      },
+      {
+        "Acceptance criteria": "No feature is removed globally from EDA rankings; any reduced set must match or improve validation objectives before adoption.",
+        "Affected field count": 16,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "Decision ID": "PREP-008",
+        "Domain": "Feature engineering",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "Evaluation only",
+        "Operation": "Compare the all-feature baseline with regularized or ablated feature sets using training and validation evidence only.",
+        "Phase": "Model selection",
+        "Prerequisite count": 2,
+        "Prerequisites": [
+          "PREP-004",
+          "PREP-005"
+        ],
+        "Rationale": "21 feature pair(s) meet the declared redundancy review rule and multiple measurements are mathematically derived.",
+        "Source stages": [
+          "12",
+          "15",
+          "17"
+        ],
+        "Status": "Deferred",
+        "Title": "Defer redundancy reduction to leakage-safe ablation"
+      },
+      {
+        "Acceptance criteria": "Each unresolved dependency is either source-verified or treated as an ordinary candidate feature during model evaluation.",
+        "Affected field count": 1,
+        "Affected fields": [
+          "ShapeFactor2"
+        ],
+        "Decision ID": "PREP-009",
+        "Domain": "Feature engineering",
+        "Evidence count": 1,
+        "Execution step count": 2,
+        "Fit scope": "Evaluation only",
+        "Operation": "Retain these features in the baseline and verify source formula or tolerance assumptions before using dependency claims to prune them.",
+        "Phase": "Model selection",
+        "Prerequisite count": 1,
+        "Prerequisites": [
+          "PREP-004"
+        ],
+        "Rationale": "At least one declared mathematical dependency did not reproduce the released values within the exploratory tolerance.",
+        "Source stages": [
+          "15",
+          "16",
+          "17"
+        ],
+        "Status": "Deferred",
+        "Title": "Keep unconfirmed derived dependencies out of automatic pruning"
+      }
+    ],
+    "execution_plan": [
+      {
+        "Acceptance criteria": "Source values and row count are preserved and analytical roles are isolated.",
+        "Action": "Revalidate the raw table and create an unchanged prepared projection.",
+        "Blocking": true,
+        "Decision IDs": [
+          "PREP-001",
+          "PREP-002",
+          "PREP-003",
+          "PREP-004"
+        ],
+        "Decision count": 4,
+        "Phase": "Before split",
+        "Sequence": 1,
+        "Status": "Planned",
+        "Step ID": "STEP-001",
+        "Temporal dependency": false
+      },
+      {
+        "Acceptance criteria": "Partitions are disjoint, class-aware, reproducible, and preserve the final test holdout.",
+        "Action": "Create reproducible stratified train, validation, and test partitions.",
+        "Blocking": true,
+        "Decision IDs": [
+          "PREP-005",
+          "PREP-010"
+        ],
+        "Decision count": 2,
+        "Phase": "Split",
+        "Sequence": 2,
+        "Status": "Planned",
+        "Step ID": "STEP-002",
+        "Temporal dependency": false
+      },
+      {
+        "Acceptance criteria": "Validation and test are transform-only and no scaler is globally fitted.",
+        "Action": "Fit model-dependent numerical preprocessing on training data only.",
+        "Blocking": true,
+        "Decision IDs": [
+          "PREP-006"
+        ],
+        "Decision count": 1,
+        "Phase": "Train-only transformation",
+        "Sequence": 3,
+        "Status": "Planned",
+        "Step ID": "STEP-003",
+        "Temporal dependency": false
+      },
+      {
+        "Acceptance criteria": "Alternatives are adopted only from training/validation evidence.",
+        "Action": "Evaluate imbalance and redundancy alternatives without changing the baseline handoff.",
+        "Blocking": false,
+        "Decision IDs": [
+          "PREP-007",
+          "PREP-008",
+          "PREP-009"
+        ],
+        "Decision count": 3,
+        "Phase": "Model selection",
+        "Sequence": 4,
+        "Status": "Deferred",
+        "Step ID": "STEP-004",
+        "Temporal dependency": false
+      },
+      {
+        "Acceptance criteria": "The final test set is accessed only after preprocessing, feature policy, and model-selection choices are frozen.",
+        "Action": "Freeze the selected preparation and feature contract before final test evaluation.",
+        "Blocking": true,
+        "Decision IDs": [
+          "PREP-001",
+          "PREP-002",
+          "PREP-003",
+          "PREP-004",
+          "PREP-005",
+          "PREP-006",
+          "PREP-007",
+          "PREP-008",
+          "PREP-010",
+          "PREP-009"
+        ],
+        "Decision count": 10,
+        "Phase": "Model selection",
+        "Sequence": 5,
+        "Status": "Deferred",
+        "Step ID": "STEP-005",
+        "Temporal dependency": false
+      }
+    ],
+    "guardrails": [
+      {
+        "Affected field count": 17,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4",
+          "Class"
+        ],
+        "Domain": "Cleaning",
+        "Guardrail ID": "GRD-001",
+        "Prohibited operation": "Modify or overwrite the acquired raw table in place.",
+        "Rationale": "Reproducible preparation requires immutable source evidence.",
+        "Severity": "Critical",
+        "Status": "Active",
+        "Title": "Preserve the raw evidence",
+        "Verification": "Raw shape, values, index, and dtypes remain unchanged."
+      },
+      {
+        "Affected field count": 1,
+        "Affected fields": [
+          "Class"
+        ],
+        "Domain": "Target governance",
+        "Guardrail ID": "GRD-004",
+        "Prohibited operation": "Include the target or a direct derivative in X or feature transformations.",
+        "Rationale": "This would constitute direct target leakage.",
+        "Severity": "Critical",
+        "Status": "Active",
+        "Title": "Keep the target outside predictors",
+        "Verification": "Predictor matrices contain exactly candidate features and never the target."
+      },
+      {
+        "Affected field count": 16,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "Domain": "Leakage governance",
+        "Guardrail ID": "GRD-005",
+        "Prohibited operation": "Fit scaling, selection, resampling, or learned transformations before splitting or on held-out data.",
+        "Rationale": "Held-out data must not influence learned preparation parameters.",
+        "Severity": "Critical",
+        "Status": "Active",
+        "Title": "Fit learned preprocessing on training only",
+        "Verification": "Every learned transformer records train-only fit scope."
+      },
+      {
+        "Affected field count": 1,
+        "Affected fields": [
+          "Class"
+        ],
+        "Domain": "Dataset splitting",
+        "Guardrail ID": "GRD-006",
+        "Prohibited operation": "Over- or undersample validation or test partitions.",
+        "Rationale": "Held-out prevalence must remain representative of the released snapshot.",
+        "Severity": "Critical",
+        "Status": "Active",
+        "Title": "Do not resample validation or test",
+        "Verification": "Validation and test row sets retain their original class composition."
+      },
+      {
+        "Affected field count": 16,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "Domain": "Feature engineering",
+        "Guardrail ID": "GRD-007",
+        "Prohibited operation": "Use full-data target associations or redundancy rankings to choose the final feature set.",
+        "Rationale": "Global selection would bias held-out evaluation.",
+        "Severity": "Critical",
+        "Status": "Active",
+        "Title": "Do not select features globally",
+        "Verification": "Ablation and selection use training/validation evidence only."
+      },
+      {
+        "Affected field count": 1,
+        "Affected fields": [
+          "Class"
+        ],
+        "Domain": "Dataset splitting",
+        "Guardrail ID": "GRD-008",
+        "Prohibited operation": "Use final-test metrics for model, feature, resampling, or hyperparameter selection.",
+        "Rationale": "Repeated test access converts the final holdout into validation data.",
+        "Severity": "Critical",
+        "Status": "Active",
+        "Title": "Protect the final test holdout",
+        "Verification": "Final test evaluation occurs only after the analysis contract is frozen."
+      },
+      {
+        "Affected field count": 17,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4",
+          "Class"
+        ],
+        "Domain": "Cleaning",
+        "Guardrail ID": "GRD-002",
+        "Prohibited operation": "Drop exact matches without independent observation identity evidence.",
+        "Rationale": "The released Dry Bean table does not provide a source observation identifier.",
+        "Severity": "High",
+        "Status": "Active",
+        "Title": "Do not deduplicate from row equality alone",
+        "Verification": "No source row is removed solely because all released values match another row."
+      },
+      {
+        "Affected field count": 16,
+        "Affected fields": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "Domain": "Cleaning",
+        "Guardrail ID": "GRD-003",
+        "Prohibited operation": "Delete, clip, winsorize, or replace values solely from an IQR flag.",
+        "Rationale": "IQR flags are distributional evidence and the audited values remain domain-valid.",
+        "Severity": "High",
+        "Status": "Active",
+        "Title": "Do not apply generic outlier cleaning",
+        "Verification": "The baseline prepared projection preserves every numerical value."
+      }
+    ],
+    "split_policy": {
+      "disjoint_partitions_required": true,
+      "identifier_grouping": [],
+      "random_seed": 42,
+      "stratification_field": "Class",
+      "temporal_policy_status": "Resolved snapshot fallback",
+      "test_fraction": 0.15,
+      "test_holdout_untouched": true,
+      "train_fraction": 0.7,
+      "validation_fraction": 0.15
+    }
+  },
+  "readiness": {
+    "deterministic_preparation_ready": true,
+    "model_selection_ready": false,
+    "model_selection_waits_for_notebook_02": true,
+    "notebook_01_complete": true,
+    "split_execution_ready": true
+  },
+  "schema_version": "exploration-handoff.v1",
+  "source": {
+    "column_count": 17,
+    "column_order": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4",
+      "Class"
+    ],
+    "dataset_id": 602,
+    "path": "data/raw/dry-bean/dataset.csv",
+    "repository": "UCI Machine Learning Repository",
+    "row_count": 13611,
+    "sha256": "1330e4ccc5c54a925e43daf60d1409ac62dad2a21de9a25213765bee4b655787"
+  },
+  "target_distribution": {
+    "class_count": 7,
+    "distribution": [
+      {
+        "Class": "SEKER",
+        "Count": 2027,
+        "Expected": true,
+        "Percentage": 0.148923664682977,
+        "Role": "Intermediate"
+      },
+      {
+        "Class": "BARBUNYA",
+        "Count": 1322,
+        "Expected": true,
+        "Percentage": 0.09712732348835501,
+        "Role": "Intermediate"
+      },
+      {
+        "Class": "BOMBAY",
+        "Count": 522,
+        "Expected": true,
+        "Percentage": 0.03835133348027331,
+        "Role": "Minority"
+      },
+      {
+        "Class": "CALI",
+        "Count": 1630,
+        "Expected": true,
+        "Percentage": 0.11975607964146646,
+        "Role": "Intermediate"
+      },
+      {
+        "Class": "DERMASON",
+        "Count": 3546,
+        "Expected": true,
+        "Percentage": 0.2605245757108221,
+        "Role": "Majority"
+      },
+      {
+        "Class": "HOROZ",
+        "Count": 1928,
+        "Expected": true,
+        "Percentage": 0.1416501359194769,
+        "Role": "Intermediate"
+      },
+      {
+        "Class": "SIRA",
+        "Count": 2636,
+        "Expected": true,
+        "Percentage": 0.19366688707662919,
+        "Role": "Intermediate"
+      }
+    ],
+    "imbalance_ratio": 6.793103448275862,
+    "majority_classes": [
+      "DERMASON"
+    ],
+    "minority_classes": [
+      "BOMBAY"
+    ],
+    "normalized_class_entropy": 0.942737050809139
+  }
+}

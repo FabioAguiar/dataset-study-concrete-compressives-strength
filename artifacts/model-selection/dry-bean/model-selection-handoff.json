@@ -1,0 +1,820 @@
+{
+  "analysis_conclusions": {
+    "confirmed_derived_feature_ablation": {
+      "all_features": {
+        "candidate_id": "hist_gradient_boosting__all_features",
+        "cv_macro_f1_mean": 0.9370121385632876,
+        "cv_macro_f1_std": 0.0038247869053157375,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 16,
+        "feature_policy": "all_features",
+        "validation_balanced_accuracy": 0.9391308599307318,
+        "validation_macro_f1": 0.9378814348554879,
+        "validation_minimum_per_class_recall": 0.8708860759493671
+      },
+      "complexity_implication": "Nine reproducible derived columns are omitted only if the reduced policy is competitive under the declared selection rule.",
+      "confirmed_derived_features_removed": [
+        "AspectRatio",
+        "Eccentricity",
+        "EquivDiameter",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "validation_macro_f1_delta_reduced_minus_all": -0.017925390699034427,
+      "without_confirmed_derived": {
+        "candidate_id": "hist_gradient_boosting__without_confirmed_derived",
+        "cv_macro_f1_mean": 0.9183019179406531,
+        "cv_macro_f1_std": 0.004924224202905914,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "ConvexArea",
+          "Extent",
+          "ShapeFactor2"
+        ],
+        "feature_count": 7,
+        "feature_policy": "without_confirmed_derived",
+        "validation_balanced_accuracy": 0.9209089382588139,
+        "validation_macro_f1": 0.9199560441564535,
+        "validation_minimum_per_class_recall": 0.8585858585858586
+      }
+    },
+    "feature_reduction_hypothesis": {
+      "hypothesis_id": "HYP-001",
+      "status": "supported"
+    },
+    "overlap_hypothesis": {
+      "focal_pair_rank": 2,
+      "highest_confusion_pair": {
+        "class_pair": [
+          "DERMASON",
+          "SIRA"
+        ],
+        "left_to_right_count": 32,
+        "mutual_confusion_count": 68,
+        "mutual_row_normalized_rate": 0.15128961644617872,
+        "right_to_left_count": 36
+      },
+      "status": "partially_supported"
+    },
+    "repeated_profile_sensitivity": {
+      "analysis_type": "non_destructive_repeated_feature_profile_sensitivity",
+      "excluding_repeated_profile_metrics": {
+        "accuracy": 0.9264560710760118,
+        "balanced_accuracy": 0.9386962969652741,
+        "log_loss": 0.22691419529040593,
+        "macro_f1": 0.9374861155459241,
+        "macro_recall": 0.9386962969652741,
+        "minimum_per_class_recall": 0.8708860759493671,
+        "row_count": 2026,
+        "weighted_f1": 0.9263198225473465
+      },
+      "interpretation": "Sensitivity only: partitions and official validation evidence are unchanged; Repeated-profile evidence does not prove duplicate identity or leakage.",
+      "macro_f1_delta_excluding_minus_full": -0.0003953193095638241,
+      "matching_feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor2",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "official_full_validation_metrics": {
+        "accuracy": 0.9270323212536729,
+        "balanced_accuracy": 0.9391308599307318,
+        "log_loss": 0.22517215001326799,
+        "macro_f1": 0.9378814348554879,
+        "macro_recall": 0.9391308599307318,
+        "minimum_per_class_recall": 0.8708860759493671,
+        "row_count": 2042,
+        "weighted_f1": 0.9268991730331414
+      },
+      "repeated_profile_validation_row_count": 16,
+      "sensitivity_row_count": 2026,
+      "validation_row_count": 2042
+    },
+    "shape_factor_2": {
+      "all_features": {
+        "candidate_id": "hist_gradient_boosting__all_features",
+        "cv_macro_f1_mean": 0.9370121385632876,
+        "cv_macro_f1_std": 0.0038247869053157375,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 16,
+        "feature_policy": "all_features",
+        "validation_balanced_accuracy": 0.9391308599307318,
+        "validation_macro_f1": 0.9378814348554879,
+        "validation_minimum_per_class_recall": 0.8708860759493671
+      },
+      "baseline_includes_shape_factor_2": true,
+      "cv_macro_f1_delta_without_minus_all": -0.0008447722842112038,
+      "interpretation": "Predictive sensitivity does not resolve or invent source provenance.",
+      "provenance_status": "unresolved",
+      "selected_feature_policy": "all_features",
+      "validation_balanced_accuracy_delta_without_minus_all": -0.0009846318354931327,
+      "validation_macro_f1_delta_without_minus_all": -0.0012044126085019036,
+      "without_shape_factor_2": {
+        "candidate_id": "hist_gradient_boosting__without_shape_factor_2",
+        "cv_macro_f1_mean": 0.9361673662790764,
+        "cv_macro_f1_std": 0.004014395771272498,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 15,
+        "feature_policy": "without_shape_factor_2",
+        "validation_balanced_accuracy": 0.9381462280952386,
+        "validation_macro_f1": 0.936677022246986,
+        "validation_minimum_per_class_recall": 0.8632911392405064
+      }
+    }
+  },
+  "artifact_type": "model_selection_handoff",
+  "available_feature_columns": [
+    "Area",
+    "Perimeter",
+    "MajorAxisLength",
+    "MinorAxisLength",
+    "AspectRatio",
+    "Eccentricity",
+    "ConvexArea",
+    "EquivDiameter",
+    "Extent",
+    "Solidity",
+    "Roundness",
+    "Compactness",
+    "ShapeFactor1",
+    "ShapeFactor2",
+    "ShapeFactor3",
+    "ShapeFactor4"
+  ],
+  "binary_threshold": {
+    "status": "not_applicable",
+    "value": null
+  },
+  "bundle": null,
+  "cv_contract": {
+    "fit_partition": "train_only",
+    "folds": [
+      {
+        "all_classes_present": true,
+        "fold": 1,
+        "train_class_counts": {
+          "BARBUNYA": 740,
+          "BOMBAY": 292,
+          "CALI": 913,
+          "DERMASON": 1985,
+          "HOROZ": 1080,
+          "SEKER": 1135,
+          "SIRA": 1476
+        },
+        "train_rows": 7621,
+        "validation_class_counts": {
+          "BARBUNYA": 185,
+          "BOMBAY": 73,
+          "CALI": 228,
+          "DERMASON": 497,
+          "HOROZ": 270,
+          "SEKER": 284,
+          "SIRA": 369
+        },
+        "validation_rows": 1906
+      },
+      {
+        "all_classes_present": true,
+        "fold": 2,
+        "train_class_counts": {
+          "BARBUNYA": 740,
+          "BOMBAY": 292,
+          "CALI": 913,
+          "DERMASON": 1985,
+          "HOROZ": 1080,
+          "SEKER": 1135,
+          "SIRA": 1476
+        },
+        "train_rows": 7621,
+        "validation_class_counts": {
+          "BARBUNYA": 185,
+          "BOMBAY": 73,
+          "CALI": 228,
+          "DERMASON": 497,
+          "HOROZ": 270,
+          "SEKER": 284,
+          "SIRA": 369
+        },
+        "validation_rows": 1906
+      },
+      {
+        "all_classes_present": true,
+        "fold": 3,
+        "train_class_counts": {
+          "BARBUNYA": 740,
+          "BOMBAY": 292,
+          "CALI": 913,
+          "DERMASON": 1986,
+          "HOROZ": 1080,
+          "SEKER": 1135,
+          "SIRA": 1476
+        },
+        "train_rows": 7622,
+        "validation_class_counts": {
+          "BARBUNYA": 185,
+          "BOMBAY": 73,
+          "CALI": 228,
+          "DERMASON": 496,
+          "HOROZ": 270,
+          "SEKER": 284,
+          "SIRA": 369
+        },
+        "validation_rows": 1905
+      },
+      {
+        "all_classes_present": true,
+        "fold": 4,
+        "train_class_counts": {
+          "BARBUNYA": 740,
+          "BOMBAY": 292,
+          "CALI": 913,
+          "DERMASON": 1986,
+          "HOROZ": 1080,
+          "SEKER": 1135,
+          "SIRA": 1476
+        },
+        "train_rows": 7622,
+        "validation_class_counts": {
+          "BARBUNYA": 185,
+          "BOMBAY": 73,
+          "CALI": 228,
+          "DERMASON": 496,
+          "HOROZ": 270,
+          "SEKER": 284,
+          "SIRA": 369
+        },
+        "validation_rows": 1905
+      },
+      {
+        "all_classes_present": true,
+        "fold": 5,
+        "train_class_counts": {
+          "BARBUNYA": 740,
+          "BOMBAY": 292,
+          "CALI": 912,
+          "DERMASON": 1986,
+          "HOROZ": 1080,
+          "SEKER": 1136,
+          "SIRA": 1476
+        },
+        "train_rows": 7622,
+        "validation_class_counts": {
+          "BARBUNYA": 185,
+          "BOMBAY": 73,
+          "CALI": 229,
+          "DERMASON": 496,
+          "HOROZ": 270,
+          "SEKER": 283,
+          "SIRA": 369
+        },
+        "validation_rows": 1905
+      }
+    ],
+    "n_splits": 5,
+    "random_state": 42,
+    "shuffle": true,
+    "strategy": "StratifiedKFold"
+  },
+  "dataset_slug": "dry-bean",
+  "decision_rule": "argmax_class_score_or_probability",
+  "final_model_trained": false,
+  "final_training_instructions": {
+    "access_test_only_after_contract_freeze_and_final_fit": true,
+    "decision_rule": "argmax_class_score_or_probability",
+    "do_not_change_feature_policy": true,
+    "do_not_change_hyperparameters": true,
+    "do_not_change_imbalance_policy": true,
+    "do_not_retune": true,
+    "evaluate_test_once": true,
+    "final_evaluation_partition": "test",
+    "fit_partitions": [
+      "train",
+      "validation"
+    ],
+    "notebook": "notebooks/04_final_model_and_bundle.ipynb",
+    "reconstruct_pipeline_from_contract": true
+  },
+  "model_artifact": null,
+  "model_artifact_materialized": false,
+  "model_bundle_materialized": false,
+  "operational_modeling_ready": false,
+  "operational_threshold": {
+    "status": "not_applicable",
+    "value": null
+  },
+  "operational_validity": "unconfirmed",
+  "positive_class": null,
+  "preparation_artifact_hashes": {
+    "feature_manifest_sha256": "c12b3d2ec9d7efdc65d922a966e9e4390529579618b71de67d92791d34e85fbc",
+    "preparation_manifest_sha256": "bf7889c9909ec25ac36b809ce4ff365d66ab7b425f1cdc3647ebb0bdaa1c3d76",
+    "prepared_sha256": "9b6db864219c22a9255e2fad23a8267ea3cdb3dbe252c3caa423b1e97452d626",
+    "quality_evidence_sha256": "5bceca6bbf8503747e227ee569d35d12d171987e8bc48da4c6c6f89f212f2ff8",
+    "split_manifest_sha256": "6713f56139eff8035f04088bfa8b23535e2e55e406f84434dda26bc980895849",
+    "test_sha256_integrity_reference_only": "5e17c1346e67cb4a786ebd11162b7e45099ded342b9de9755ab4f18f4068c175",
+    "train_sha256": "485594b308ad5e6bb36bfe6a7758ded01c061ed5062995cc89a3a13fc962e536",
+    "validation_sha256": "f379db8842c3de49d70c7fe4dd449cdc3220052f9d7bdd85d3051b927fb8fd94"
+  },
+  "preparation_handoff_reference": {
+    "byte_sha256": "ad6673e3c5ba5e1d91a1b372442b9a484d704cc7f56befa23c021b0fb9be6206",
+    "path": "artifacts/preparation/dry-bean/preparation-handoff.json",
+    "schema_version": "preparation-handoff.v1"
+  },
+  "primary_metric": "macro_f1",
+  "problem_type": "multiclass_classification",
+  "random_seeds": {
+    "cross_validation": 42,
+    "estimators": 42,
+    "randomized_search": 42,
+    "split_reference": 42
+  },
+  "readiness": {
+    "candidate_models_evaluated": true,
+    "feature_policy_evaluated": true,
+    "final_model_trained": false,
+    "final_model_training_ready": true,
+    "frozen_partitions_respected": true,
+    "imbalance_policy_frozen": true,
+    "model_artifact_materialized": false,
+    "model_bundle_materialized": false,
+    "model_selection_handoff_reloadable": true,
+    "multiclass_cv_completed": true,
+    "multiclass_decision_rule_frozen": true,
+    "operational_modeling_ready": false,
+    "operational_validity": "unconfirmed",
+    "preparation_handoff_validated": true,
+    "selected_candidate_frozen": true,
+    "test_partition_evaluated": false,
+    "test_partition_sealed": true
+  },
+  "schema_version": "model-selection-handoff.v2",
+  "secondary_metrics": [
+    "balanced_accuracy",
+    "macro_recall",
+    "weighted_f1",
+    "accuracy_context_only",
+    "per_class_precision",
+    "per_class_recall",
+    "per_class_f1",
+    "support",
+    "confusion_matrix",
+    "multiclass_log_loss"
+  ],
+  "selected_cv_evidence": {
+    "base_model_id": "hist_gradient_boosting",
+    "cv_accuracy_mean": 0.9242165505807053,
+    "cv_balanced_accuracy_mean": 0.9354242745920734,
+    "cv_log_loss_mean": 0.2581143487298275,
+    "cv_macro_f1_mean": 0.9370121385632876,
+    "cv_macro_f1_std": 0.0038247869053157375,
+    "cv_macro_recall_mean": 0.9354242745920734,
+    "cv_weighted_f1_mean": 0.924310373008779,
+    "duration_seconds": 9.220824697054923,
+    "failures": [],
+    "family": "HistGradientBoostingClassifier",
+    "feature_columns": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "feature_count": 16,
+    "feature_policy": "all_features",
+    "fold_metrics": [
+      {
+        "accuracy": 0.9197271773347324,
+        "balanced_accuracy": 0.9316914606571676,
+        "fold": 1,
+        "log_loss": 0.25670183439018585,
+        "macro_f1": 0.9344898733685219,
+        "macro_recall": 0.9316914606571676,
+        "weighted_f1": 0.9199785359738002
+      },
+      {
+        "accuracy": 0.9176285414480587,
+        "balanced_accuracy": 0.9310709248291094,
+        "fold": 2,
+        "log_loss": 0.2766123045852485,
+        "macro_f1": 0.9316430621223927,
+        "macro_recall": 0.9310709248291094,
+        "weighted_f1": 0.9176760780726823
+      },
+      {
+        "accuracy": 0.9233595800524934,
+        "balanced_accuracy": 0.9389103468221067,
+        "fold": 3,
+        "log_loss": 0.26582765641121,
+        "macro_f1": 0.9383409976962637,
+        "macro_recall": 0.9389103468221067,
+        "weighted_f1": 0.9233822263444752
+      },
+      {
+        "accuracy": 0.9291338582677166,
+        "balanced_accuracy": 0.9343189434473832,
+        "fold": 4,
+        "log_loss": 0.22545667941674502,
+        "macro_f1": 0.9375862396335385,
+        "macro_recall": 0.9343189434473832,
+        "weighted_f1": 0.929458549458021
+      },
+      {
+        "accuracy": 0.9312335958005249,
+        "balanced_accuracy": 0.9411296972046,
+        "fold": 5,
+        "log_loss": 0.2659732688457482,
+        "macro_f1": 0.9430005199957213,
+        "macro_recall": 0.9411296972046,
+        "weighted_f1": 0.9310564751949169
+      }
+    ],
+    "model_id": "hist_gradient_boosting__all_features",
+    "number_of_fits": 5,
+    "selected_hyperparameters": {
+      "model__class_weight": null,
+      "model__l2_regularization": 0.0,
+      "model__learning_rate": 0.05,
+      "model__max_iter": 250,
+      "model__max_leaf_nodes": 15,
+      "model__min_samples_leaf": 40
+    }
+  },
+  "selected_feature_columns": [
+    "Area",
+    "Perimeter",
+    "MajorAxisLength",
+    "MinorAxisLength",
+    "AspectRatio",
+    "Eccentricity",
+    "ConvexArea",
+    "EquivDiameter",
+    "Extent",
+    "Solidity",
+    "Roundness",
+    "Compactness",
+    "ShapeFactor1",
+    "ShapeFactor2",
+    "ShapeFactor3",
+    "ShapeFactor4"
+  ],
+  "selected_feature_policy": "all_features",
+  "selected_hyperparameters": {
+    "model__class_weight": null,
+    "model__l2_regularization": 0.0,
+    "model__learning_rate": 0.05,
+    "model__max_iter": 250,
+    "model__max_leaf_nodes": 15,
+    "model__min_samples_leaf": 40
+  },
+  "selected_imbalance_policy": {
+    "class_weight": null,
+    "resampling": "none",
+    "strategy": "none"
+  },
+  "selected_model_family": "HistGradientBoostingClassifier",
+  "selected_model_id": "hist_gradient_boosting__all_features",
+  "selected_preprocessing_contract": {
+    "categorical_processing": "not_applicable",
+    "feature_projection": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "learned_preprocessing_in_notebook_02": false,
+    "numerical_scaling": "none",
+    "pipeline": "sklearn.pipeline.Pipeline",
+    "scaling_fit_scope": "inside_training_fold_or_final_training_only"
+  },
+  "selected_validation_evidence": {
+    "confusion_matrix": {
+      "class_order": [
+        "SEKER",
+        "BARBUNYA",
+        "BOMBAY",
+        "CALI",
+        "DERMASON",
+        "HOROZ",
+        "SIRA"
+      ],
+      "counts": [
+        [
+          294,
+          1,
+          0,
+          0,
+          4,
+          0,
+          5
+        ],
+        [
+          1,
+          182,
+          0,
+          13,
+          0,
+          0,
+          2
+        ],
+        [
+          0,
+          0,
+          79,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          8,
+          1,
+          234,
+          0,
+          1,
+          0
+        ],
+        [
+          11,
+          0,
+          0,
+          0,
+          486,
+          3,
+          32
+        ],
+        [
+          0,
+          0,
+          0,
+          6,
+          1,
+          274,
+          8
+        ],
+        [
+          5,
+          2,
+          0,
+          0,
+          36,
+          8,
+          344
+        ]
+      ],
+      "row_normalized": [
+        [
+          0.9671052631578947,
+          0.003289473684210526,
+          0.0,
+          0.0,
+          0.013157894736842105,
+          0.0,
+          0.01644736842105263
+        ],
+        [
+          0.005050505050505051,
+          0.9191919191919192,
+          0.0,
+          0.06565656565656566,
+          0.0,
+          0.0,
+          0.010101010101010102
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.004081632653061225,
+          0.0326530612244898,
+          0.004081632653061225,
+          0.9551020408163265,
+          0.0,
+          0.004081632653061225,
+          0.0
+        ],
+        [
+          0.020676691729323307,
+          0.0,
+          0.0,
+          0.0,
+          0.9135338345864662,
+          0.005639097744360902,
+          0.06015037593984962
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.020761245674740483,
+          0.0034602076124567475,
+          0.9480968858131488,
+          0.02768166089965398
+        ],
+        [
+          0.012658227848101266,
+          0.005063291139240506,
+          0.0,
+          0.0,
+          0.09113924050632911,
+          0.020253164556962026,
+          0.8708860759493671
+        ]
+      ]
+    },
+    "decision_rule": "argmax_class_score_or_probability",
+    "metrics": {
+      "accuracy": 0.9270323212536729,
+      "balanced_accuracy": 0.9391308599307318,
+      "log_loss": 0.22517215001326799,
+      "macro_f1": 0.9378814348554879,
+      "macro_recall": 0.9391308599307318,
+      "minimum_per_class_recall": 0.8708860759493671,
+      "row_count": 2042,
+      "weighted_f1": 0.9268991730331414
+    },
+    "per_class": [
+      {
+        "class": "SEKER",
+        "f1": 0.9545454545454546,
+        "precision": 0.9423076923076923,
+        "recall": 0.9671052631578947,
+        "support": 304
+      },
+      {
+        "class": "BARBUNYA",
+        "f1": 0.9309462915601023,
+        "precision": 0.9430051813471503,
+        "recall": 0.9191919191919192,
+        "support": 198
+      },
+      {
+        "class": "BOMBAY",
+        "f1": 0.9937106918238994,
+        "precision": 0.9875,
+        "recall": 1.0,
+        "support": 79
+      },
+      {
+        "class": "CALI",
+        "f1": 0.9397590361445783,
+        "precision": 0.924901185770751,
+        "recall": 0.9551020408163265,
+        "support": 245
+      },
+      {
+        "class": "DERMASON",
+        "f1": 0.9178470254957507,
+        "precision": 0.9222011385199241,
+        "recall": 0.9135338345864662,
+        "support": 532
+      },
+      {
+        "class": "HOROZ",
+        "f1": 0.9530434782608695,
+        "precision": 0.958041958041958,
+        "recall": 0.9480968858131488,
+        "support": 289
+      },
+      {
+        "class": "SIRA",
+        "f1": 0.8753180661577609,
+        "precision": 0.8797953964194374,
+        "recall": 0.8708860759493671,
+        "support": 395
+      }
+    ]
+  },
+  "selection_rationale": "Candidates within the declared validation macro-F1 tolerance were resolved by balanced accuracy, worst-class recall, CV stability, comparable log loss, simplicity, and stable model ID.",
+  "target_classes": [
+    "SEKER",
+    "BARBUNYA",
+    "BOMBAY",
+    "CALI",
+    "DERMASON",
+    "HOROZ",
+    "SIRA"
+  ],
+  "target_column": "Class",
+  "target_encoding": {
+    "BARBUNYA": 1,
+    "BOMBAY": 2,
+    "CALI": 3,
+    "DERMASON": 4,
+    "HOROZ": 5,
+    "SEKER": 0,
+    "SIRA": 6
+  },
+  "target_semantics": "nominal_unordered",
+  "test_partition_evaluated": false,
+  "test_partition_sealed": true,
+  "tie_break_rationale": {
+    "order": [
+      "higher_validation_balanced_accuracy",
+      "higher_minimum_per_class_recall",
+      "lower_cv_macro_f1_std",
+      "lower_validation_log_loss_when_comparable",
+      "simpler_pipeline_or_model",
+      "stable_model_id"
+    ],
+    "practical_tie": true,
+    "tolerance": 0.002
+  }
+}

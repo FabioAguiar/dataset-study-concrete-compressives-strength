@@ -1,0 +1,50 @@
+{
+  "schema_version": "preparation-handoff.v1",
+  "artifact_type": "preparation_handoff",
+  "dataset_slug": "dry-bean",
+  "components": {
+    "feature_manifest": {
+      "path": "artifacts/preparation/dry-bean/feature-manifest.json",
+      "sha256": "c12b3d2ec9d7efdc65d922a966e9e4390529579618b71de67d92791d34e85fbc",
+      "schema_version": "feature-manifest.v2"
+    },
+    "preparation_manifest": {
+      "path": "artifacts/preparation/dry-bean/preparation-manifest.json",
+      "sha256": "bf7889c9909ec25ac36b809ce4ff365d66ab7b425f1cdc3647ebb0bdaa1c3d76",
+      "schema_version": "preparation-manifest.v1"
+    },
+    "quality_evidence": {
+      "path": "artifacts/preparation/dry-bean/quality-evidence.json",
+      "sha256": "5bceca6bbf8503747e227ee569d35d12d171987e8bc48da4c6c6f89f212f2ff8",
+      "schema_version": "quality-evidence.v1"
+    },
+    "split_manifest": {
+      "path": "artifacts/preparation/dry-bean/split-manifest.json",
+      "sha256": "6713f56139eff8035f04088bfa8b23535e2e55e406f84434dda26bc980895849",
+      "schema_version": "split-manifest.v2"
+    }
+  },
+  "readiness": {
+    "notebook_01_handoff_validated": true,
+    "source_independently_revalidated": true,
+    "prepared_projection_materialized": true,
+    "split_materialized": true,
+    "partition_integrity_validated": true,
+    "preparation_handoff_reloadable": true,
+    "educational_model_selection_ready": true,
+    "test_partition_sealed": true,
+    "test_partition_evaluated": false,
+    "model_selected": false,
+    "final_model_trained": false,
+    "operational_modeling_ready": false,
+    "operational_validity": "unconfirmed",
+    "temporal_contract_status": "resolved_static_snapshot",
+    "feature_inference_availability": "unconfirmed"
+  },
+  "consumer_contract": {
+    "prepared_and_partitions_are_frozen": true,
+    "model_selection_must_not_resplit": true,
+    "test_partition_sealed": true,
+    "test_partition_evaluated": false
+  }
+}

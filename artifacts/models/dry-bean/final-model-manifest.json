@@ -1,0 +1,618 @@
+{
+  "analysis_conclusions": {
+    "confirmed_derived_feature_ablation": {
+      "all_features": {
+        "candidate_id": "hist_gradient_boosting__all_features",
+        "cv_macro_f1_mean": 0.9370121385632876,
+        "cv_macro_f1_std": 0.0038247869053157375,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 16,
+        "feature_policy": "all_features",
+        "validation_balanced_accuracy": 0.9391308599307318,
+        "validation_macro_f1": 0.9378814348554879,
+        "validation_minimum_per_class_recall": 0.8708860759493671
+      },
+      "complexity_implication": "Nine reproducible derived columns are omitted only if the reduced policy is competitive under the declared selection rule.",
+      "confirmed_derived_features_removed": [
+        "AspectRatio",
+        "Eccentricity",
+        "EquivDiameter",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "validation_macro_f1_delta_reduced_minus_all": -0.017925390699034427,
+      "without_confirmed_derived": {
+        "candidate_id": "hist_gradient_boosting__without_confirmed_derived",
+        "cv_macro_f1_mean": 0.9183019179406531,
+        "cv_macro_f1_std": 0.004924224202905914,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "ConvexArea",
+          "Extent",
+          "ShapeFactor2"
+        ],
+        "feature_count": 7,
+        "feature_policy": "without_confirmed_derived",
+        "validation_balanced_accuracy": 0.9209089382588139,
+        "validation_macro_f1": 0.9199560441564535,
+        "validation_minimum_per_class_recall": 0.8585858585858586
+      }
+    },
+    "shape_factor_2": {
+      "all_features": {
+        "candidate_id": "hist_gradient_boosting__all_features",
+        "cv_macro_f1_mean": 0.9370121385632876,
+        "cv_macro_f1_std": 0.0038247869053157375,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor2",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 16,
+        "feature_policy": "all_features",
+        "validation_balanced_accuracy": 0.9391308599307318,
+        "validation_macro_f1": 0.9378814348554879,
+        "validation_minimum_per_class_recall": 0.8708860759493671
+      },
+      "baseline_includes_shape_factor_2": true,
+      "cv_macro_f1_delta_without_minus_all": -0.0008447722842112038,
+      "interpretation": "Predictive sensitivity does not resolve or invent source provenance.",
+      "provenance_status": "unresolved",
+      "selected_feature_policy": "all_features",
+      "validation_balanced_accuracy_delta_without_minus_all": -0.0009846318354931327,
+      "validation_macro_f1_delta_without_minus_all": -0.0012044126085019036,
+      "without_shape_factor_2": {
+        "candidate_id": "hist_gradient_boosting__without_shape_factor_2",
+        "cv_macro_f1_mean": 0.9361673662790764,
+        "cv_macro_f1_std": 0.004014395771272498,
+        "feature_columns": [
+          "Area",
+          "Perimeter",
+          "MajorAxisLength",
+          "MinorAxisLength",
+          "AspectRatio",
+          "Eccentricity",
+          "ConvexArea",
+          "EquivDiameter",
+          "Extent",
+          "Solidity",
+          "Roundness",
+          "Compactness",
+          "ShapeFactor1",
+          "ShapeFactor3",
+          "ShapeFactor4"
+        ],
+        "feature_count": 15,
+        "feature_policy": "without_shape_factor_2",
+        "validation_balanced_accuracy": 0.9381462280952386,
+        "validation_macro_f1": 0.936677022246986,
+        "validation_minimum_per_class_recall": 0.8632911392405064
+      }
+    }
+  },
+  "artifact_format": "joblib",
+  "artifact_type": "final_model_manifest",
+  "categorical_features": [],
+  "dataset_slug": "dry-bean",
+  "decision_rule": "argmax_class_score_or_probability",
+  "estimator_class_order": [
+    "BARBUNYA",
+    "BOMBAY",
+    "CALI",
+    "DERMASON",
+    "HOROZ",
+    "SEKER",
+    "SIRA"
+  ],
+  "estimator_random_state": 42,
+  "feature_columns": [
+    "Area",
+    "Perimeter",
+    "MajorAxisLength",
+    "MinorAxisLength",
+    "AspectRatio",
+    "Eccentricity",
+    "ConvexArea",
+    "EquivDiameter",
+    "Extent",
+    "Solidity",
+    "Roundness",
+    "Compactness",
+    "ShapeFactor1",
+    "ShapeFactor2",
+    "ShapeFactor3",
+    "ShapeFactor4"
+  ],
+  "feature_policy": "all_features",
+  "final_artifact_fingerprints": {
+    "final-pipeline.joblib": {
+      "byte_sha256": "b7d8aa9c5846237c58d4e9cd05ed451cad3d36931822d1b74da28c3d8db1e478",
+      "semantic_sha256": "0f301110a38db2e60d3c41432c69cc7458e301fd8865858f3ac9b853b87909aa"
+    },
+    "final-test-evidence.json": {
+      "byte_sha256": "21032b01419ffdc79181aa75de1148323be611e35039a961c075b1b36124bc02",
+      "semantic_sha256": "e7907df5bd57e2fe68b4a96be064d95afdbd66b019df273062428a2c39b1f872"
+    },
+    "inference-bundle.json": {
+      "byte_sha256": "b34dc5036e15a55a819be6ced11e243f75360032b061f21b3bd8752b6f8545ea",
+      "semantic_sha256": "4023abb1a25a44f2c2c5b64e4fd3043735ae61234cf36f23fe480da3b2f6e843"
+    }
+  },
+  "final_artifact_paths": {
+    "final-model-handoff.json": "artifacts/models/dry-bean/final-model-handoff.json",
+    "final-model-manifest.json": "artifacts/models/dry-bean/final-model-manifest.json",
+    "final-pipeline.joblib": "artifacts/models/dry-bean/final-pipeline.joblib",
+    "final-test-evidence.json": "artifacts/models/dry-bean/final-test-evidence.json",
+    "inference-bundle.json": "artifacts/models/dry-bean/inference-bundle.json"
+  },
+  "final_training_class_counts": {
+    "BARBUNYA": 1123,
+    "BOMBAY": 444,
+    "CALI": 1386,
+    "DERMASON": 3014,
+    "HOROZ": 1639,
+    "SEKER": 1723,
+    "SIRA": 2240
+  },
+  "final_training_partitions": [
+    "train",
+    "validation"
+  ],
+  "final_training_row_count": 11569,
+  "fit_duration_seconds": 0.8268398977816105,
+  "frozen_finalization_contract": {
+    "binary_threshold": "not_applicable",
+    "categorical_features": [],
+    "dataset_slug": "dry-bean",
+    "decision_rule": "argmax_class_score_or_probability",
+    "evaluation_partition": "test",
+    "feature_columns": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "feature_policy": "all_features",
+    "hyperparameters": {
+      "model__class_weight": null,
+      "model__l2_regularization": 0.0,
+      "model__learning_rate": 0.05,
+      "model__max_iter": 250,
+      "model__max_leaf_nodes": 15,
+      "model__min_samples_leaf": 40
+    },
+    "identifier_columns": [],
+    "imbalance_policy": {
+      "class_weight": null,
+      "resampling": "none",
+      "strategy": "none"
+    },
+    "model_family": "HistGradientBoostingClassifier",
+    "model_id": "hist_gradient_boosting__all_features",
+    "model_selection_handoff_reference": {
+      "byte_sha256": "295ec0bdeb643fb92fc183c1541dee891ad51be9b2901132801db5290466302d",
+      "path": "artifacts/model-selection/dry-bean/model-selection-handoff.json"
+    },
+    "numerical_features": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "operational_threshold": "not_applicable",
+    "positive_class": "not_applicable",
+    "preprocessing_contract": {
+      "categorical_processing": "not_applicable",
+      "feature_projection": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor2",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "learned_preprocessing_in_notebook_02": false,
+      "numerical_scaling": "none",
+      "pipeline": "sklearn.pipeline.Pipeline",
+      "scaling_fit_scope": "inside_training_fold_or_final_training_only"
+    },
+    "problem_type": "multiclass_classification",
+    "random_state": 42,
+    "target_classes": [
+      "SEKER",
+      "BARBUNYA",
+      "BOMBAY",
+      "CALI",
+      "DERMASON",
+      "HOROZ",
+      "SIRA"
+    ],
+    "target_column": "Class",
+    "target_encoding": {
+      "BARBUNYA": 1,
+      "BOMBAY": 2,
+      "CALI": 3,
+      "DERMASON": 4,
+      "HOROZ": 5,
+      "SEKER": 0,
+      "SIRA": 6
+    },
+    "target_semantics": "nominal_unordered",
+    "test_access_policy": {
+      "access_only_after_contract_freeze_and_final_fit": true,
+      "evaluate_once": true
+    },
+    "test_partition_reference": {
+      "byte_sha256": "5e17c1346e67cb4a786ebd11162b7e45099ded342b9de9755ab4f18f4068c175",
+      "path": "data/processed/dry-bean/splits/stratified-70-15-15-seed-42/test.csv",
+      "row_count": 2042
+    },
+    "training_partitions": [
+      "train",
+      "validation"
+    ]
+  },
+  "frozen_finalization_contract_fingerprint": "81e7de5f50f191d81a113e411ca2a6be9400ebb52d1307a934d20b1636f9dc1b",
+  "identifier_columns": [],
+  "imbalance_policy": {
+    "class_weight": null,
+    "resampling": "none",
+    "strategy": "none"
+  },
+  "limitations": [
+    "Educational final model completed; production approval is not claimed.",
+    "Operational validity remains unconfirmed.",
+    "ShapeFactor2 source provenance remains unresolved; predictive sensitivity does not resolve source provenance.",
+    "No production data contract, monitoring, SLO, retraining, or deployment validation exists."
+  ],
+  "model_artifact_byte_sha256": "b7d8aa9c5846237c58d4e9cd05ed451cad3d36931822d1b74da28c3d8db1e478",
+  "model_artifact_path": "artifacts/models/dry-bean/final-pipeline.joblib",
+  "model_state_descriptor": {
+    "estimator_class_order": [
+      "BARBUNYA",
+      "BOMBAY",
+      "CALI",
+      "DERMASON",
+      "HOROZ",
+      "SEKER",
+      "SIRA"
+    ],
+    "feature_order": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "fitted_state": {
+      "do_early_stopping": true,
+      "is_fitted": true,
+      "n_iter": 101
+    },
+    "imbalance_policy": {
+      "class_weight": null,
+      "resampling": "none",
+      "strategy": "none"
+    },
+    "model_class": "sklearn.ensemble._hist_gradient_boosting.gradient_boosting.HistGradientBoostingClassifier",
+    "output_class_order": [
+      "SEKER",
+      "BARBUNYA",
+      "BOMBAY",
+      "CALI",
+      "DERMASON",
+      "HOROZ",
+      "SIRA"
+    ],
+    "pipeline_class": "sklearn.pipeline.Pipeline",
+    "preprocess_class": "sklearn.compose._column_transformer.ColumnTransformer",
+    "preprocessing_contract": {
+      "categorical_processing": "not_applicable",
+      "feature_projection": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor2",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "learned_preprocessing_in_notebook_02": false,
+      "numerical_scaling": "none",
+      "pipeline": "sklearn.pipeline.Pipeline",
+      "scaling_fit_scope": "inside_training_fold_or_final_training_only"
+    },
+    "random_state": 42,
+    "runtime_versions": {
+      "joblib": "1.5.3",
+      "pandas": "3.0.5",
+      "python": "3.13.13",
+      "scikit_learn": "1.9.0"
+    },
+    "selected_hyperparameters": {
+      "model__class_weight": null,
+      "model__l2_regularization": 0.0,
+      "model__learning_rate": 0.05,
+      "model__max_iter": 250,
+      "model__max_leaf_nodes": 15,
+      "model__min_samples_leaf": 40
+    },
+    "steps": [
+      "preprocess",
+      "model"
+    ],
+    "transformed_feature_names": [
+      "numerical__Area",
+      "numerical__Perimeter",
+      "numerical__MajorAxisLength",
+      "numerical__MinorAxisLength",
+      "numerical__AspectRatio",
+      "numerical__Eccentricity",
+      "numerical__ConvexArea",
+      "numerical__EquivDiameter",
+      "numerical__Extent",
+      "numerical__Solidity",
+      "numerical__Roundness",
+      "numerical__Compactness",
+      "numerical__ShapeFactor1",
+      "numerical__ShapeFactor2",
+      "numerical__ShapeFactor3",
+      "numerical__ShapeFactor4"
+    ]
+  },
+  "model_state_fingerprint": "0f301110a38db2e60d3c41432c69cc7458e301fd8865858f3ac9b853b87909aa",
+  "numerical_features": [
+    "Area",
+    "Perimeter",
+    "MajorAxisLength",
+    "MinorAxisLength",
+    "AspectRatio",
+    "Eccentricity",
+    "ConvexArea",
+    "EquivDiameter",
+    "Extent",
+    "Solidity",
+    "Roundness",
+    "Compactness",
+    "ShapeFactor1",
+    "ShapeFactor2",
+    "ShapeFactor3",
+    "ShapeFactor4"
+  ],
+  "operational_modeling_ready": false,
+  "operational_validity": "unconfirmed",
+  "output_class_order": [
+    "SEKER",
+    "BARBUNYA",
+    "BOMBAY",
+    "CALI",
+    "DERMASON",
+    "HOROZ",
+    "SIRA"
+  ],
+  "preprocessing_contract": {
+    "categorical_processing": "not_applicable",
+    "feature_projection": [
+      "Area",
+      "Perimeter",
+      "MajorAxisLength",
+      "MinorAxisLength",
+      "AspectRatio",
+      "Eccentricity",
+      "ConvexArea",
+      "EquivDiameter",
+      "Extent",
+      "Solidity",
+      "Roundness",
+      "Compactness",
+      "ShapeFactor1",
+      "ShapeFactor2",
+      "ShapeFactor3",
+      "ShapeFactor4"
+    ],
+    "learned_preprocessing_in_notebook_02": false,
+    "numerical_scaling": "none",
+    "pipeline": "sklearn.pipeline.Pipeline",
+    "scaling_fit_scope": "inside_training_fold_or_final_training_only"
+  },
+  "problem_type": "multiclass_classification",
+  "readiness": {
+    "educational_final_model_completed": true,
+    "educational_inference_demo_ready": true,
+    "final_model_handoff_ready": true,
+    "final_model_trained": true,
+    "final_test_evaluation_completed": true,
+    "final_training_completed": true,
+    "frozen_finalization_contract_validated": true,
+    "inference_smoke_test_completed": true,
+    "model_artifact_materialized": true,
+    "model_bundle_materialized": true,
+    "model_selection_handoff_validated": true,
+    "operational_modeling_ready": false,
+    "preparation_handoff_validated": true,
+    "serialization_reload_validated": true,
+    "test_partition_evaluation_count": 1,
+    "test_partition_opened_after_final_fit": true,
+    "test_used_for_adjustment": false
+  },
+  "runtime_versions": {
+    "joblib": "1.5.3",
+    "pandas": "3.0.5",
+    "python": "3.13.13",
+    "scikit_learn": "1.9.0"
+  },
+  "schema_version": "final-model-manifest.v2",
+  "selected_hyperparameters": {
+    "model__class_weight": null,
+    "model__l2_regularization": 0.0,
+    "model__learning_rate": 0.05,
+    "model__max_iter": 250,
+    "model__max_leaf_nodes": 15,
+    "model__min_samples_leaf": 40
+  },
+  "selected_model_family": "HistGradientBoostingClassifier",
+  "selected_model_id": "hist_gradient_boosting__all_features",
+  "target_classes": [
+    "SEKER",
+    "BARBUNYA",
+    "BOMBAY",
+    "CALI",
+    "DERMASON",
+    "HOROZ",
+    "SIRA"
+  ],
+  "target_column": "Class",
+  "target_encoding_metadata_only": {
+    "BARBUNYA": 1,
+    "BOMBAY": 2,
+    "CALI": 3,
+    "DERMASON": 4,
+    "HOROZ": 5,
+    "SEKER": 0,
+    "SIRA": 6
+  },
+  "target_semantics": "nominal_unordered",
+  "test_access_policy": {
+    "loaded_after_final_fit": true,
+    "test_evaluation_count": 1,
+    "used_for_adjustment": false
+  },
+  "test_partition_reference": {
+    "byte_sha256": "5e17c1346e67cb4a786ebd11162b7e45099ded342b9de9755ab4f18f4068c175",
+    "class_counts": {
+      "BARBUNYA": 199,
+      "BOMBAY": 78,
+      "CALI": 244,
+      "DERMASON": 532,
+      "HOROZ": 289,
+      "SEKER": 304,
+      "SIRA": 396
+    },
+    "path": "data/processed/dry-bean/splits/stratified-70-15-15-seed-42/test.csv",
+    "row_count": 2042
+  },
+  "upstream_references": {
+    "model_selection": {
+      "byte_sha256": "295ec0bdeb643fb92fc183c1541dee891ad51be9b2901132801db5290466302d",
+      "path": "artifacts/model-selection/dry-bean/model-selection-handoff.json",
+      "schema_version": "model-selection-handoff.v2"
+    },
+    "preparation": {
+      "byte_sha256": "ad6673e3c5ba5e1d91a1b372442b9a484d704cc7f56befa23c021b0fb9be6206",
+      "components": {
+        "feature_manifest": {
+          "path": "artifacts/preparation/dry-bean/feature-manifest.json",
+          "schema_version": "feature-manifest.v2",
+          "sha256": "c12b3d2ec9d7efdc65d922a966e9e4390529579618b71de67d92791d34e85fbc"
+        },
+        "preparation_manifest": {
+          "path": "artifacts/preparation/dry-bean/preparation-manifest.json",
+          "schema_version": "preparation-manifest.v1",
+          "sha256": "bf7889c9909ec25ac36b809ce4ff365d66ab7b425f1cdc3647ebb0bdaa1c3d76"
+        },
+        "quality_evidence": {
+          "path": "artifacts/preparation/dry-bean/quality-evidence.json",
+          "schema_version": "quality-evidence.v1",
+          "sha256": "5bceca6bbf8503747e227ee569d35d12d171987e8bc48da4c6c6f89f212f2ff8"
+        },
+        "split_manifest": {
+          "path": "artifacts/preparation/dry-bean/split-manifest.json",
+          "schema_version": "split-manifest.v2",
+          "sha256": "6713f56139eff8035f04088bfa8b23535e2e55e406f84434dda26bc980895849"
+        }
+      },
+      "path": "artifacts/preparation/dry-bean/preparation-handoff.json"
+    }
+  }
+}

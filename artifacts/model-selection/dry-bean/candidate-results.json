@@ -1,0 +1,2456 @@
+{
+  "artifact_type": "candidate_results",
+  "baseline": {
+    "cv": {
+      "cv_accuracy_mean": 0.2605226760086259,
+      "cv_balanced_accuracy_mean": 0.14285714285714285,
+      "cv_log_loss_mean": 1.8344211549992764,
+      "cv_macro_f1_mean": 0.05905093593837516,
+      "cv_macro_f1_std": 3.418240683191664e-05,
+      "cv_macro_recall_mean": 0.14285714285714285,
+      "cv_weighted_f1_mean": 0.10768880044862568,
+      "duration_seconds": 0.16668526967987418,
+      "failures": [],
+      "family": "DummyClassifier",
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor2",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "feature_count": 16,
+      "feature_policy": "all_features",
+      "fold_metrics": [
+        {
+          "accuracy": 0.2607555089192025,
+          "balanced_accuracy": 0.14285714285714285,
+          "fold": 1,
+          "log_loss": 1.8342440771281752,
+          "macro_f1": 0.059092800665834375,
+          "macro_recall": 0.14285714285714285,
+          "weighted_f1": 0.10786141317756442
+        },
+        {
+          "accuracy": 0.2607555089192025,
+          "balanced_accuracy": 0.14285714285714285,
+          "fold": 2,
+          "log_loss": 1.8342440771281752,
+          "macro_f1": 0.059092800665834375,
+          "macro_recall": 0.14285714285714285,
+          "weighted_f1": 0.10786141317756442
+        },
+        {
+          "accuracy": 0.26036745406824147,
+          "balanced_accuracy": 0.14285714285714285,
+          "fold": 3,
+          "log_loss": 1.8345008199408004,
+          "macro_f1": 0.05902302612006902,
+          "macro_recall": 0.14285714285714285,
+          "weighted_f1": 0.10757372529599982
+        },
+        {
+          "accuracy": 0.26036745406824147,
+          "balanced_accuracy": 0.14285714285714285,
+          "fold": 4,
+          "log_loss": 1.8345008199408004,
+          "macro_f1": 0.05902302612006902,
+          "macro_recall": 0.14285714285714285,
+          "weighted_f1": 0.10757372529599982
+        },
+        {
+          "accuracy": 0.26036745406824147,
+          "balanced_accuracy": 0.14285714285714285,
+          "fold": 5,
+          "log_loss": 1.8346159808584295,
+          "macro_f1": 0.05902302612006902,
+          "macro_recall": 0.14285714285714285,
+          "weighted_f1": 0.10757372529599982
+        }
+      ],
+      "model_id": "dummy_prior",
+      "number_of_fits": 5
+    },
+    "eligible": false,
+    "family": "DummyClassifier",
+    "model_id": "dummy_prior",
+    "strategy": "prior",
+    "validation": {
+      "confusion_matrix": {
+        "class_order": [
+          "SEKER",
+          "BARBUNYA",
+          "BOMBAY",
+          "CALI",
+          "DERMASON",
+          "HOROZ",
+          "SIRA"
+        ],
+        "counts": [
+          [
+            0,
+            0,
+            0,
+            0,
+            304,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            198,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            79,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            245,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            532,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            289,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            395,
+            0,
+            0
+          ]
+        ],
+        "row_normalized": [
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ]
+        ]
+      },
+      "decision_rule": "argmax_class_score_or_probability",
+      "metrics": {
+        "accuracy": 0.2605288932419197,
+        "balanced_accuracy": 0.14285714285714285,
+        "log_loss": 1.8349687241986776,
+        "macro_f1": 0.059052059052059055,
+        "macro_recall": 0.14285714285714285,
+        "minimum_per_class_recall": 0.0,
+        "row_count": 2042,
+        "weighted_f1": 0.10769337311942602
+      },
+      "per_class": [
+        {
+          "class": "SEKER",
+          "f1": 0.0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "support": 304
+        },
+        {
+          "class": "BARBUNYA",
+          "f1": 0.0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "support": 198
+        },
+        {
+          "class": "BOMBAY",
+          "f1": 0.0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "support": 79
+        },
+        {
+          "class": "CALI",
+          "f1": 0.0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "support": 245
+        },
+        {
+          "class": "DERMASON",
+          "f1": 0.4133644133644134,
+          "precision": 0.2605288932419197,
+          "recall": 1.0,
+          "support": 532
+        },
+        {
+          "class": "HOROZ",
+          "f1": 0.0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "support": 289
+        },
+        {
+          "class": "SIRA",
+          "f1": 0.0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "support": 395
+        }
+      ]
+    }
+  },
+  "family_searches": [
+    {
+      "best_index": 2,
+      "best_parameters": {
+        "model__C": 1.0,
+        "model__class_weight": null
+      },
+      "candidate_count": 4,
+      "cv_accuracy_mean": 0.9219065638830823,
+      "cv_balanced_accuracy_mean": 0.9338257023841028,
+      "cv_log_loss_mean": 0.21853805184750405,
+      "cv_macro_f1_confidence_lower": 0.9341579486245766,
+      "cv_macro_f1_confidence_upper": 0.9359032964457072,
+      "cv_macro_f1_mean": 0.9350306225351419,
+      "cv_macro_f1_std": 0.000995590911334026,
+      "cv_macro_recall_mean": 0.9338257023841028,
+      "cv_weighted_f1_mean": 0.9220705915597602,
+      "failures": [],
+      "family": "LogisticRegression",
+      "feature_policy": "all_features",
+      "fold_metrics": [
+        {
+          "accuracy": 0.9181532004197271,
+          "balanced_accuracy": 0.9327683690998368,
+          "fold": 1,
+          "log_loss": 0.20717458192009494,
+          "macro_f1": 0.9335879660097198,
+          "macro_recall": 0.9327683690998368,
+          "weighted_f1": 0.918491739028872
+        },
+        {
+          "accuracy": 0.9218258132214061,
+          "balanced_accuracy": 0.9343961608624037,
+          "fold": 2,
+          "log_loss": 0.22196150774416123,
+          "macro_f1": 0.9353517851254857,
+          "macro_recall": 0.9343961608624037,
+          "weighted_f1": 0.9219738399796062
+        },
+        {
+          "accuracy": 0.920734908136483,
+          "balanced_accuracy": 0.9348901886821982,
+          "fold": 3,
+          "log_loss": 0.2335877395421215,
+          "macro_f1": 0.9355927684952652,
+          "macro_recall": 0.9348901886821982,
+          "weighted_f1": 0.9209628595546163
+        },
+        {
+          "accuracy": 0.9280839895013123,
+          "balanced_accuracy": 0.9338015586884477,
+          "fold": 4,
+          "log_loss": 0.2025452040769319,
+          "macro_f1": 0.9363824811836852,
+          "macro_recall": 0.9338015586884477,
+          "weighted_f1": 0.9281677405365127
+        },
+        {
+          "accuracy": 0.920734908136483,
+          "balanced_accuracy": 0.9332722345876273,
+          "fold": 5,
+          "log_loss": 0.2274212259542107,
+          "macro_f1": 0.9342381118615537,
+          "macro_recall": 0.9332722345876273,
+          "weighted_f1": 0.9207567786991935
+        }
+      ],
+      "mean_fit_time": 0.24647727012634277,
+      "model_id": "logistic_regression",
+      "number_of_fits": 20,
+      "search_duration_seconds": 5.496294711716473,
+      "search_strategy": "GridSearchCV",
+      "warnings": []
+    },
+    {
+      "best_index": 5,
+      "best_parameters": {
+        "model__class_weight": "balanced",
+        "model__max_depth": 8,
+        "model__min_samples_leaf": 5
+      },
+      "candidate_count": 8,
+      "cv_accuracy_mean": 0.908786949899888,
+      "cv_balanced_accuracy_mean": 0.9205568334744765,
+      "cv_log_loss_mean": 0.6628840649889663,
+      "cv_macro_f1_confidence_lower": 0.9114036181160506,
+      "cv_macro_f1_confidence_upper": 0.9284046383360783,
+      "cv_macro_f1_mean": 0.9199041282260645,
+      "cv_macro_f1_std": 0.009697815535415896,
+      "cv_macro_recall_mean": 0.9205568334744765,
+      "cv_weighted_f1_mean": 0.9088618628666424,
+      "failures": [],
+      "family": "DecisionTreeClassifier",
+      "feature_policy": "all_features",
+      "fold_metrics": [
+        {
+          "accuracy": 0.9071353620146905,
+          "balanced_accuracy": 0.9200666181628979,
+          "fold": 1,
+          "log_loss": 0.6154490600165171,
+          "macro_f1": 0.9195712814529239,
+          "macro_recall": 0.9200666181628979,
+          "weighted_f1": 0.907432307955231
+        },
+        {
+          "accuracy": 0.8971668415529905,
+          "balanced_accuracy": 0.9102767735351428,
+          "fold": 2,
+          "log_loss": 0.7596961588498901,
+          "macro_f1": 0.9091228252705532,
+          "macro_recall": 0.9102767735351428,
+          "weighted_f1": 0.8973177829653477
+        },
+        {
+          "accuracy": 0.8971128608923884,
+          "balanced_accuracy": 0.9119239000344509,
+          "fold": 3,
+          "log_loss": 0.7237674366871204,
+          "macro_f1": 0.9093611035401932,
+          "macro_recall": 0.9119239000344509,
+          "weighted_f1": 0.897104697146662
+        },
+        {
+          "accuracy": 0.9212598425196851,
+          "balanced_accuracy": 0.9286349750096133,
+          "fold": 4,
+          "log_loss": 0.6487494947476232,
+          "macro_f1": 0.9287055401739508,
+          "macro_recall": 0.9286349750096133,
+          "weighted_f1": 0.9213795084659423
+        },
+        {
+          "accuracy": 0.9212598425196851,
+          "balanced_accuracy": 0.9318819006302774,
+          "fold": 5,
+          "log_loss": 0.5667581746436811,
+          "macro_f1": 0.9327598906927008,
+          "macro_recall": 0.9318819006302774,
+          "weighted_f1": 0.9210750178000295
+        }
+      ],
+      "mean_fit_time": 0.09186511039733887,
+      "model_id": "decision_tree",
+      "number_of_fits": 40,
+      "search_duration_seconds": 5.461149984039366,
+      "search_strategy": "GridSearchCV",
+      "warnings": []
+    },
+    {
+      "best_index": 2,
+      "best_parameters": {
+        "model__class_weight": null,
+        "model__max_depth": null,
+        "model__min_samples_leaf": 1,
+        "model__n_estimators": 120
+      },
+      "candidate_count": 8,
+      "cv_accuracy_mean": 0.9212773036109206,
+      "cv_balanced_accuracy_mean": 0.9316564672169975,
+      "cv_log_loss_mean": 0.3427675967050424,
+      "cv_macro_f1_confidence_lower": 0.9301563059381452,
+      "cv_macro_f1_confidence_upper": 0.9365292749138125,
+      "cv_macro_f1_mean": 0.9333427904259789,
+      "cv_macro_f1_std": 0.003635304042879892,
+      "cv_macro_recall_mean": 0.9316564672169975,
+      "cv_weighted_f1_mean": 0.9212736957739732,
+      "failures": [],
+      "family": "RandomForestClassifier",
+      "feature_policy": "all_features",
+      "fold_metrics": [
+        {
+          "accuracy": 0.9160545645330536,
+          "balanced_accuracy": 0.9285918956684244,
+          "fold": 1,
+          "log_loss": 0.3098425811817014,
+          "macro_f1": 0.9304096197143387,
+          "macro_recall": 0.9285918956684244,
+          "weighted_f1": 0.9160916285140355
+        },
+        {
+          "accuracy": 0.9176285414480587,
+          "balanced_accuracy": 0.9301587249139055,
+          "fold": 2,
+          "log_loss": 0.3947161562314714,
+          "macro_f1": 0.930353452922813,
+          "macro_recall": 0.9301587249139055,
+          "weighted_f1": 0.9177750754222362
+        },
+        {
+          "accuracy": 0.9170603674540683,
+          "balanced_accuracy": 0.9300184216598391,
+          "fold": 3,
+          "log_loss": 0.35065034975533493,
+          "macro_f1": 0.9315134314244252,
+          "macro_recall": 0.9300184216598391,
+          "weighted_f1": 0.916980981131651
+        },
+        {
+          "accuracy": 0.9270341207349081,
+          "balanced_accuracy": 0.9316128014213045,
+          "fold": 4,
+          "log_loss": 0.29533672777083014,
+          "macro_f1": 0.9344668818091358,
+          "macro_recall": 0.9316128014213045,
+          "weighted_f1": 0.9272162343098351
+        },
+        {
+          "accuracy": 0.9286089238845144,
+          "balanced_accuracy": 0.9379004924215132,
+          "fold": 5,
+          "log_loss": 0.36329216858587454,
+          "macro_f1": 0.9399705662591814,
+          "macro_recall": 0.9379004924215132,
+          "weighted_f1": 0.9283045594921085
+        }
+      ],
+      "mean_fit_time": 1.9945213317871093,
+      "model_id": "random_forest",
+      "number_of_fits": 40,
+      "search_duration_seconds": 125.58305175974965,
+      "search_strategy": "RandomizedSearchCV",
+      "warnings": []
+    },
+    {
+      "best_index": 4,
+      "best_parameters": {
+        "model__class_weight": null,
+        "model__l2_regularization": 0.0,
+        "model__learning_rate": 0.05,
+        "model__max_iter": 250,
+        "model__max_leaf_nodes": 15,
+        "model__min_samples_leaf": 40
+      },
+      "candidate_count": 8,
+      "cv_accuracy_mean": 0.9242165505807053,
+      "cv_balanced_accuracy_mean": 0.9354242745920734,
+      "cv_log_loss_mean": 0.2581143487298275,
+      "cv_macro_f1_confidence_lower": 0.9336595650235506,
+      "cv_macro_f1_confidence_upper": 0.9403647121030245,
+      "cv_macro_f1_mean": 0.9370121385632876,
+      "cv_macro_f1_std": 0.0038247869053157375,
+      "cv_macro_recall_mean": 0.9354242745920734,
+      "cv_weighted_f1_mean": 0.924310373008779,
+      "failures": [],
+      "family": "HistGradientBoostingClassifier",
+      "feature_policy": "all_features",
+      "fold_metrics": [
+        {
+          "accuracy": 0.9197271773347324,
+          "balanced_accuracy": 0.9316914606571676,
+          "fold": 1,
+          "log_loss": 0.25670183439018585,
+          "macro_f1": 0.9344898733685219,
+          "macro_recall": 0.9316914606571676,
+          "weighted_f1": 0.9199785359738002
+        },
+        {
+          "accuracy": 0.9176285414480587,
+          "balanced_accuracy": 0.9310709248291094,
+          "fold": 2,
+          "log_loss": 0.2766123045852485,
+          "macro_f1": 0.9316430621223927,
+          "macro_recall": 0.9310709248291094,
+          "weighted_f1": 0.9176760780726823
+        },
+        {
+          "accuracy": 0.9233595800524934,
+          "balanced_accuracy": 0.9389103468221067,
+          "fold": 3,
+          "log_loss": 0.26582765641121,
+          "macro_f1": 0.9383409976962637,
+          "macro_recall": 0.9389103468221067,
+          "weighted_f1": 0.9233822263444752
+        },
+        {
+          "accuracy": 0.9291338582677166,
+          "balanced_accuracy": 0.9343189434473832,
+          "fold": 4,
+          "log_loss": 0.22545667941674502,
+          "macro_f1": 0.9375862396335385,
+          "macro_recall": 0.9343189434473832,
+          "weighted_f1": 0.929458549458021
+        },
+        {
+          "accuracy": 0.9312335958005249,
+          "balanced_accuracy": 0.9411296972046,
+          "fold": 5,
+          "log_loss": 0.2659732688457482,
+          "macro_f1": 0.9430005199957213,
+          "macro_recall": 0.9411296972046,
+          "weighted_f1": 0.9310564751949169
+        }
+      ],
+      "mean_fit_time": 1.7700467586517334,
+      "model_id": "hist_gradient_boosting",
+      "number_of_fits": 40,
+      "search_duration_seconds": 87.9870105329901,
+      "search_strategy": "RandomizedSearchCV",
+      "warnings": []
+    }
+  ],
+  "policy_candidates": [
+    {
+      "base_model_id": "hist_gradient_boosting",
+      "cv_accuracy_mean": 0.9242165505807053,
+      "cv_balanced_accuracy_mean": 0.9354242745920734,
+      "cv_log_loss_mean": 0.2581143487298275,
+      "cv_macro_f1_mean": 0.9370121385632876,
+      "cv_macro_f1_std": 0.0038247869053157375,
+      "cv_macro_recall_mean": 0.9354242745920734,
+      "cv_weighted_f1_mean": 0.924310373008779,
+      "duration_seconds": 9.220824697054923,
+      "eligible": true,
+      "failures": [],
+      "family": "HistGradientBoostingClassifier",
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor2",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "feature_count": 16,
+      "feature_policy": "all_features",
+      "fold_metrics": [
+        {
+          "accuracy": 0.9197271773347324,
+          "balanced_accuracy": 0.9316914606571676,
+          "fold": 1,
+          "log_loss": 0.25670183439018585,
+          "macro_f1": 0.9344898733685219,
+          "macro_recall": 0.9316914606571676,
+          "weighted_f1": 0.9199785359738002
+        },
+        {
+          "accuracy": 0.9176285414480587,
+          "balanced_accuracy": 0.9310709248291094,
+          "fold": 2,
+          "log_loss": 0.2766123045852485,
+          "macro_f1": 0.9316430621223927,
+          "macro_recall": 0.9310709248291094,
+          "weighted_f1": 0.9176760780726823
+        },
+        {
+          "accuracy": 0.9233595800524934,
+          "balanced_accuracy": 0.9389103468221067,
+          "fold": 3,
+          "log_loss": 0.26582765641121,
+          "macro_f1": 0.9383409976962637,
+          "macro_recall": 0.9389103468221067,
+          "weighted_f1": 0.9233822263444752
+        },
+        {
+          "accuracy": 0.9291338582677166,
+          "balanced_accuracy": 0.9343189434473832,
+          "fold": 4,
+          "log_loss": 0.22545667941674502,
+          "macro_f1": 0.9375862396335385,
+          "macro_recall": 0.9343189434473832,
+          "weighted_f1": 0.929458549458021
+        },
+        {
+          "accuracy": 0.9312335958005249,
+          "balanced_accuracy": 0.9411296972046,
+          "fold": 5,
+          "log_loss": 0.2659732688457482,
+          "macro_f1": 0.9430005199957213,
+          "macro_recall": 0.9411296972046,
+          "weighted_f1": 0.9310564751949169
+        }
+      ],
+      "model_id": "hist_gradient_boosting__all_features",
+      "number_of_fits": 5,
+      "selected_hyperparameters": {
+        "model__class_weight": null,
+        "model__l2_regularization": 0.0,
+        "model__learning_rate": 0.05,
+        "model__max_iter": 250,
+        "model__max_leaf_nodes": 15,
+        "model__min_samples_leaf": 40
+      },
+      "validation": {
+        "confusion_matrix": {
+          "class_order": [
+            "SEKER",
+            "BARBUNYA",
+            "BOMBAY",
+            "CALI",
+            "DERMASON",
+            "HOROZ",
+            "SIRA"
+          ],
+          "counts": [
+            [
+              294,
+              1,
+              0,
+              0,
+              4,
+              0,
+              5
+            ],
+            [
+              1,
+              182,
+              0,
+              13,
+              0,
+              0,
+              2
+            ],
+            [
+              0,
+              0,
+              79,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              8,
+              1,
+              234,
+              0,
+              1,
+              0
+            ],
+            [
+              11,
+              0,
+              0,
+              0,
+              486,
+              3,
+              32
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              1,
+              274,
+              8
+            ],
+            [
+              5,
+              2,
+              0,
+              0,
+              36,
+              8,
+              344
+            ]
+          ],
+          "row_normalized": [
+            [
+              0.9671052631578947,
+              0.003289473684210526,
+              0.0,
+              0.0,
+              0.013157894736842105,
+              0.0,
+              0.01644736842105263
+            ],
+            [
+              0.005050505050505051,
+              0.9191919191919192,
+              0.0,
+              0.06565656565656566,
+              0.0,
+              0.0,
+              0.010101010101010102
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.004081632653061225,
+              0.0326530612244898,
+              0.004081632653061225,
+              0.9551020408163265,
+              0.0,
+              0.004081632653061225,
+              0.0
+            ],
+            [
+              0.020676691729323307,
+              0.0,
+              0.0,
+              0.0,
+              0.9135338345864662,
+              0.005639097744360902,
+              0.06015037593984962
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.020761245674740483,
+              0.0034602076124567475,
+              0.9480968858131488,
+              0.02768166089965398
+            ],
+            [
+              0.012658227848101266,
+              0.005063291139240506,
+              0.0,
+              0.0,
+              0.09113924050632911,
+              0.020253164556962026,
+              0.8708860759493671
+            ]
+          ]
+        },
+        "decision_rule": "argmax_class_score_or_probability",
+        "metrics": {
+          "accuracy": 0.9270323212536729,
+          "balanced_accuracy": 0.9391308599307318,
+          "log_loss": 0.22517215001326799,
+          "macro_f1": 0.9378814348554879,
+          "macro_recall": 0.9391308599307318,
+          "minimum_per_class_recall": 0.8708860759493671,
+          "row_count": 2042,
+          "weighted_f1": 0.9268991730331414
+        },
+        "per_class": [
+          {
+            "class": "SEKER",
+            "f1": 0.9545454545454546,
+            "precision": 0.9423076923076923,
+            "recall": 0.9671052631578947,
+            "support": 304
+          },
+          {
+            "class": "BARBUNYA",
+            "f1": 0.9309462915601023,
+            "precision": 0.9430051813471503,
+            "recall": 0.9191919191919192,
+            "support": 198
+          },
+          {
+            "class": "BOMBAY",
+            "f1": 0.9937106918238994,
+            "precision": 0.9875,
+            "recall": 1.0,
+            "support": 79
+          },
+          {
+            "class": "CALI",
+            "f1": 0.9397590361445783,
+            "precision": 0.924901185770751,
+            "recall": 0.9551020408163265,
+            "support": 245
+          },
+          {
+            "class": "DERMASON",
+            "f1": 0.9178470254957507,
+            "precision": 0.9222011385199241,
+            "recall": 0.9135338345864662,
+            "support": 532
+          },
+          {
+            "class": "HOROZ",
+            "f1": 0.9530434782608695,
+            "precision": 0.958041958041958,
+            "recall": 0.9480968858131488,
+            "support": 289
+          },
+          {
+            "class": "SIRA",
+            "f1": 0.8753180661577609,
+            "precision": 0.8797953964194374,
+            "recall": 0.8708860759493671,
+            "support": 395
+          }
+        ]
+      }
+    },
+    {
+      "base_model_id": "hist_gradient_boosting",
+      "cv_accuracy_mean": 0.9067921992437199,
+      "cv_balanced_accuracy_mean": 0.9164032654302632,
+      "cv_log_loss_mean": 0.28397038428359805,
+      "cv_macro_f1_mean": 0.9183019179406531,
+      "cv_macro_f1_std": 0.004924224202905914,
+      "cv_macro_recall_mean": 0.9164032654302632,
+      "cv_weighted_f1_mean": 0.9068090141824191,
+      "duration_seconds": 7.938026107847691,
+      "eligible": true,
+      "failures": [],
+      "family": "HistGradientBoostingClassifier",
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "ConvexArea",
+        "Extent",
+        "ShapeFactor2"
+      ],
+      "feature_count": 7,
+      "feature_policy": "without_confirmed_derived",
+      "fold_metrics": [
+        {
+          "accuracy": 0.9024134312696747,
+          "balanced_accuracy": 0.9137972683682115,
+          "fold": 1,
+          "log_loss": 0.28694277340542385,
+          "macro_f1": 0.9155475318942602,
+          "macro_recall": 0.9137972683682115,
+          "weighted_f1": 0.902749545277737
+        },
+        {
+          "accuracy": 0.9018887722980063,
+          "balanced_accuracy": 0.9140982621488248,
+          "fold": 2,
+          "log_loss": 0.30020359952836506,
+          "macro_f1": 0.9151538266871136,
+          "macro_recall": 0.9140982621488248,
+          "weighted_f1": 0.9017583309790136
+        },
+        {
+          "accuracy": 0.9034120734908136,
+          "balanced_accuracy": 0.913925098674562,
+          "fold": 3,
+          "log_loss": 0.29915948733511044,
+          "macro_f1": 0.9148422202604622,
+          "macro_recall": 0.913925098674562,
+          "weighted_f1": 0.903374872164608
+        },
+        {
+          "accuracy": 0.9091863517060368,
+          "balanced_accuracy": 0.9152518628915493,
+          "fold": 4,
+          "log_loss": 0.26700977299333417,
+          "macro_f1": 0.9180866736021046,
+          "macro_recall": 0.9152518628915493,
+          "weighted_f1": 0.9092612170160068
+        },
+        {
+          "accuracy": 0.9170603674540683,
+          "balanced_accuracy": 0.9249438350681685,
+          "fold": 5,
+          "log_loss": 0.26653628815575703,
+          "macro_f1": 0.927879337259324,
+          "macro_recall": 0.9249438350681685,
+          "weighted_f1": 0.9169011054747302
+        }
+      ],
+      "model_id": "hist_gradient_boosting__without_confirmed_derived",
+      "number_of_fits": 5,
+      "selected_hyperparameters": {
+        "model__class_weight": null,
+        "model__l2_regularization": 0.0,
+        "model__learning_rate": 0.05,
+        "model__max_iter": 250,
+        "model__max_leaf_nodes": 15,
+        "model__min_samples_leaf": 40
+      },
+      "validation": {
+        "confusion_matrix": {
+          "class_order": [
+            "SEKER",
+            "BARBUNYA",
+            "BOMBAY",
+            "CALI",
+            "DERMASON",
+            "HOROZ",
+            "SIRA"
+          ],
+          "counts": [
+            [
+              290,
+              1,
+              0,
+              0,
+              4,
+              0,
+              9
+            ],
+            [
+              3,
+              170,
+              0,
+              22,
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              0,
+              79,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              9,
+              1,
+              232,
+              0,
+              2,
+              0
+            ],
+            [
+              14,
+              0,
+              0,
+              0,
+              480,
+              6,
+              32
+            ],
+            [
+              0,
+              4,
+              0,
+              7,
+              5,
+              267,
+              6
+            ],
+            [
+              7,
+              2,
+              0,
+              0,
+              39,
+              7,
+              340
+            ]
+          ],
+          "row_normalized": [
+            [
+              0.9539473684210527,
+              0.003289473684210526,
+              0.0,
+              0.0,
+              0.013157894736842105,
+              0.0,
+              0.029605263157894735
+            ],
+            [
+              0.015151515151515152,
+              0.8585858585858586,
+              0.0,
+              0.1111111111111111,
+              0.0,
+              0.005050505050505051,
+              0.010101010101010102
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.004081632653061225,
+              0.036734693877551024,
+              0.004081632653061225,
+              0.9469387755102041,
+              0.0,
+              0.00816326530612245,
+              0.0
+            ],
+            [
+              0.02631578947368421,
+              0.0,
+              0.0,
+              0.0,
+              0.9022556390977443,
+              0.011278195488721804,
+              0.06015037593984962
+            ],
+            [
+              0.0,
+              0.01384083044982699,
+              0.0,
+              0.02422145328719723,
+              0.01730103806228374,
+              0.9238754325259516,
+              0.020761245674740483
+            ],
+            [
+              0.017721518987341773,
+              0.005063291139240506,
+              0.0,
+              0.0,
+              0.09873417721518987,
+              0.017721518987341773,
+              0.8607594936708861
+            ]
+          ]
+        },
+        "decision_rule": "argmax_class_score_or_probability",
+        "metrics": {
+          "accuracy": 0.9098922624877571,
+          "balanced_accuracy": 0.9209089382588139,
+          "log_loss": 0.278822692701108,
+          "macro_f1": 0.9199560441564535,
+          "macro_recall": 0.9209089382588139,
+          "minimum_per_class_recall": 0.8585858585858586,
+          "row_count": 2042,
+          "weighted_f1": 0.909667122332165
+        },
+        "per_class": [
+          {
+            "class": "SEKER",
+            "f1": 0.9369951534733441,
+            "precision": 0.9206349206349206,
+            "recall": 0.9539473684210527,
+            "support": 304
+          },
+          {
+            "class": "BARBUNYA",
+            "f1": 0.8854166666666666,
+            "precision": 0.9139784946236559,
+            "recall": 0.8585858585858586,
+            "support": 198
+          },
+          {
+            "class": "BOMBAY",
+            "f1": 0.9937106918238994,
+            "precision": 0.9875,
+            "recall": 1.0,
+            "support": 79
+          },
+          {
+            "class": "CALI",
+            "f1": 0.9169960474308301,
+            "precision": 0.8888888888888888,
+            "recall": 0.9469387755102041,
+            "support": 245
+          },
+          {
+            "class": "DERMASON",
+            "f1": 0.9056603773584906,
+            "precision": 0.9090909090909091,
+            "recall": 0.9022556390977443,
+            "support": 532
+          },
+          {
+            "class": "HOROZ",
+            "f1": 0.9335664335664335,
+            "precision": 0.9434628975265018,
+            "recall": 0.9238754325259516,
+            "support": 289
+          },
+          {
+            "class": "SIRA",
+            "f1": 0.8673469387755102,
+            "precision": 0.8740359897172236,
+            "recall": 0.8607594936708861,
+            "support": 395
+          }
+        ]
+      }
+    },
+    {
+      "base_model_id": "hist_gradient_boosting",
+      "cv_accuracy_mean": 0.9232716686909412,
+      "cv_balanced_accuracy_mean": 0.9349277247480845,
+      "cv_log_loss_mean": 0.2555058634552748,
+      "cv_macro_f1_mean": 0.9361673662790764,
+      "cv_macro_f1_std": 0.004014395771272498,
+      "cv_macro_recall_mean": 0.9349277247480845,
+      "cv_weighted_f1_mean": 0.9233886696472041,
+      "duration_seconds": 8.829658225178719,
+      "eligible": true,
+      "failures": [],
+      "family": "HistGradientBoostingClassifier",
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "feature_count": 15,
+      "feature_policy": "without_shape_factor_2",
+      "fold_metrics": [
+        {
+          "accuracy": 0.916579223504722,
+          "balanced_accuracy": 0.9295830339429546,
+          "fold": 1,
+          "log_loss": 0.25124334436148577,
+          "macro_f1": 0.9318738503279143,
+          "macro_recall": 0.9295830339429546,
+          "weighted_f1": 0.916849000073777
+        },
+        {
+          "accuracy": 0.9207764952780693,
+          "balanced_accuracy": 0.9335909788970902,
+          "fold": 2,
+          "log_loss": 0.27557790401177745,
+          "macro_f1": 0.9341408470267972,
+          "macro_recall": 0.9335909788970902,
+          "weighted_f1": 0.9209604850794876
+        },
+        {
+          "accuracy": 0.9244094488188976,
+          "balanced_accuracy": 0.939824575932638,
+          "fold": 3,
+          "log_loss": 0.2615454908187327,
+          "macro_f1": 0.9395036184525525,
+          "macro_recall": 0.939824575932638,
+          "weighted_f1": 0.9244001164101208
+        },
+        {
+          "accuracy": 0.9238845144356955,
+          "balanced_accuracy": 0.930816244514064,
+          "fold": 4,
+          "log_loss": 0.22555609725022227,
+          "macro_f1": 0.9330519945939951,
+          "macro_recall": 0.930816244514064,
+          "weighted_f1": 0.924207402207165
+        },
+        {
+          "accuracy": 0.9307086614173228,
+          "balanced_accuracy": 0.9408237904536758,
+          "fold": 5,
+          "log_loss": 0.2636064808341559,
+          "macro_f1": 0.9422665209941234,
+          "macro_recall": 0.9408237904536758,
+          "weighted_f1": 0.9305263444654707
+        }
+      ],
+      "model_id": "hist_gradient_boosting__without_shape_factor_2",
+      "number_of_fits": 5,
+      "selected_hyperparameters": {
+        "model__class_weight": null,
+        "model__l2_regularization": 0.0,
+        "model__learning_rate": 0.05,
+        "model__max_iter": 250,
+        "model__max_leaf_nodes": 15,
+        "model__min_samples_leaf": 40
+      },
+      "validation": {
+        "confusion_matrix": {
+          "class_order": [
+            "SEKER",
+            "BARBUNYA",
+            "BOMBAY",
+            "CALI",
+            "DERMASON",
+            "HOROZ",
+            "SIRA"
+          ],
+          "counts": [
+            [
+              294,
+              0,
+              0,
+              1,
+              4,
+              0,
+              5
+            ],
+            [
+              1,
+              184,
+              0,
+              12,
+              0,
+              0,
+              1
+            ],
+            [
+              0,
+              0,
+              79,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              7,
+              1,
+              234,
+              0,
+              1,
+              1
+            ],
+            [
+              12,
+              0,
+              0,
+              0,
+              481,
+              4,
+              35
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              1,
+              274,
+              8
+            ],
+            [
+              4,
+              2,
+              0,
+              0,
+              39,
+              9,
+              341
+            ]
+          ],
+          "row_normalized": [
+            [
+              0.9671052631578947,
+              0.0,
+              0.0,
+              0.003289473684210526,
+              0.013157894736842105,
+              0.0,
+              0.01644736842105263
+            ],
+            [
+              0.005050505050505051,
+              0.9292929292929293,
+              0.0,
+              0.06060606060606061,
+              0.0,
+              0.0,
+              0.005050505050505051
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.004081632653061225,
+              0.02857142857142857,
+              0.004081632653061225,
+              0.9551020408163265,
+              0.0,
+              0.004081632653061225,
+              0.004081632653061225
+            ],
+            [
+              0.022556390977443608,
+              0.0,
+              0.0,
+              0.0,
+              0.9041353383458647,
+              0.007518796992481203,
+              0.06578947368421052
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.020761245674740483,
+              0.0034602076124567475,
+              0.9480968858131488,
+              0.02768166089965398
+            ],
+            [
+              0.010126582278481013,
+              0.005063291139240506,
+              0.0,
+              0.0,
+              0.09873417721518987,
+              0.02278481012658228,
+              0.8632911392405064
+            ]
+          ]
+        },
+        "decision_rule": "argmax_class_score_or_probability",
+        "metrics": {
+          "accuracy": 0.9240940254652301,
+          "balanced_accuracy": 0.9381462280952386,
+          "log_loss": 0.22958049353385007,
+          "macro_f1": 0.936677022246986,
+          "macro_recall": 0.9381462280952385,
+          "minimum_per_class_recall": 0.8632911392405064,
+          "row_count": 2042,
+          "weighted_f1": 0.9239346411877809
+        },
+        "per_class": [
+          {
+            "class": "SEKER",
+            "f1": 0.9545454545454546,
+            "precision": 0.9423076923076923,
+            "recall": 0.9671052631578947,
+            "support": 304
+          },
+          {
+            "class": "BARBUNYA",
+            "f1": 0.9411764705882353,
+            "precision": 0.9533678756476683,
+            "recall": 0.9292929292929293,
+            "support": 198
+          },
+          {
+            "class": "BOMBAY",
+            "f1": 0.9937106918238994,
+            "precision": 0.9875,
+            "recall": 1.0,
+            "support": 79
+          },
+          {
+            "class": "CALI",
+            "f1": 0.9397590361445783,
+            "precision": 0.924901185770751,
+            "recall": 0.9551020408163265,
+            "support": 245
+          },
+          {
+            "class": "DERMASON",
+            "f1": 0.9101229895931883,
+            "precision": 0.9161904761904762,
+            "recall": 0.9041353383458647,
+            "support": 532
+          },
+          {
+            "class": "HOROZ",
+            "f1": 0.949740034662045,
+            "precision": 0.9513888888888888,
+            "recall": 0.9480968858131488,
+            "support": 289
+          },
+          {
+            "class": "SIRA",
+            "f1": 0.8676844783715013,
+            "precision": 0.8721227621483376,
+            "recall": 0.8632911392405064,
+            "support": 395
+          }
+        ]
+      }
+    },
+    {
+      "base_model_id": "logistic_regression",
+      "cv_accuracy_mean": 0.9219065638830823,
+      "cv_balanced_accuracy_mean": 0.9338257023841028,
+      "cv_log_loss_mean": 0.21853805184750405,
+      "cv_macro_f1_mean": 0.9350306225351419,
+      "cv_macro_f1_std": 0.000995590911334026,
+      "cv_macro_recall_mean": 0.9338257023841028,
+      "cv_weighted_f1_mean": 0.9220705915597602,
+      "duration_seconds": 1.4020879389718175,
+      "eligible": true,
+      "failures": [],
+      "family": "LogisticRegression",
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor2",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "feature_count": 16,
+      "feature_policy": "all_features",
+      "fold_metrics": [
+        {
+          "accuracy": 0.9181532004197271,
+          "balanced_accuracy": 0.9327683690998368,
+          "fold": 1,
+          "log_loss": 0.20717458192009494,
+          "macro_f1": 0.9335879660097198,
+          "macro_recall": 0.9327683690998368,
+          "weighted_f1": 0.918491739028872
+        },
+        {
+          "accuracy": 0.9218258132214061,
+          "balanced_accuracy": 0.9343961608624037,
+          "fold": 2,
+          "log_loss": 0.22196150774416123,
+          "macro_f1": 0.9353517851254857,
+          "macro_recall": 0.9343961608624037,
+          "weighted_f1": 0.9219738399796062
+        },
+        {
+          "accuracy": 0.920734908136483,
+          "balanced_accuracy": 0.9348901886821982,
+          "fold": 3,
+          "log_loss": 0.2335877395421215,
+          "macro_f1": 0.9355927684952652,
+          "macro_recall": 0.9348901886821982,
+          "weighted_f1": 0.9209628595546163
+        },
+        {
+          "accuracy": 0.9280839895013123,
+          "balanced_accuracy": 0.9338015586884477,
+          "fold": 4,
+          "log_loss": 0.2025452040769319,
+          "macro_f1": 0.9363824811836852,
+          "macro_recall": 0.9338015586884477,
+          "weighted_f1": 0.9281677405365127
+        },
+        {
+          "accuracy": 0.920734908136483,
+          "balanced_accuracy": 0.9332722345876273,
+          "fold": 5,
+          "log_loss": 0.2274212259542107,
+          "macro_f1": 0.9342381118615537,
+          "macro_recall": 0.9332722345876273,
+          "weighted_f1": 0.9207567786991935
+        }
+      ],
+      "model_id": "logistic_regression__all_features",
+      "number_of_fits": 5,
+      "selected_hyperparameters": {
+        "model__C": 1.0,
+        "model__class_weight": null
+      },
+      "validation": {
+        "confusion_matrix": {
+          "class_order": [
+            "SEKER",
+            "BARBUNYA",
+            "BOMBAY",
+            "CALI",
+            "DERMASON",
+            "HOROZ",
+            "SIRA"
+          ],
+          "counts": [
+            [
+              294,
+              2,
+              0,
+              0,
+              0,
+              0,
+              8
+            ],
+            [
+              1,
+              179,
+              0,
+              16,
+              0,
+              0,
+              2
+            ],
+            [
+              0,
+              0,
+              79,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              8,
+              0,
+              234,
+              0,
+              1,
+              1
+            ],
+            [
+              10,
+              0,
+              0,
+              0,
+              473,
+              4,
+              45
+            ],
+            [
+              0,
+              1,
+              0,
+              8,
+              4,
+              271,
+              5
+            ],
+            [
+              7,
+              3,
+              0,
+              0,
+              32,
+              12,
+              341
+            ]
+          ],
+          "row_normalized": [
+            [
+              0.9671052631578947,
+              0.006578947368421052,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.02631578947368421
+            ],
+            [
+              0.005050505050505051,
+              0.9040404040404041,
+              0.0,
+              0.08080808080808081,
+              0.0,
+              0.0,
+              0.010101010101010102
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.004081632653061225,
+              0.0326530612244898,
+              0.0,
+              0.9551020408163265,
+              0.0,
+              0.004081632653061225,
+              0.004081632653061225
+            ],
+            [
+              0.018796992481203006,
+              0.0,
+              0.0,
+              0.0,
+              0.8890977443609023,
+              0.007518796992481203,
+              0.08458646616541353
+            ],
+            [
+              0.0,
+              0.0034602076124567475,
+              0.0,
+              0.02768166089965398,
+              0.01384083044982699,
+              0.9377162629757786,
+              0.01730103806228374
+            ],
+            [
+              0.017721518987341773,
+              0.007594936708860759,
+              0.0,
+              0.0,
+              0.0810126582278481,
+              0.030379746835443037,
+              0.8632911392405064
+            ]
+          ]
+        },
+        "decision_rule": "argmax_class_score_or_probability",
+        "metrics": {
+          "accuracy": 0.9162585700293829,
+          "balanced_accuracy": 0.9309075506559733,
+          "log_loss": 0.22251148648526908,
+          "macro_f1": 0.9289726887818729,
+          "macro_recall": 0.9309075506559733,
+          "minimum_per_class_recall": 0.8632911392405064,
+          "row_count": 2042,
+          "weighted_f1": 0.9161988315389281
+        },
+        "per_class": [
+          {
+            "class": "SEKER",
+            "f1": 0.9529983792544571,
+            "precision": 0.939297124600639,
+            "recall": 0.9671052631578947,
+            "support": 304
+          },
+          {
+            "class": "BARBUNYA",
+            "f1": 0.9156010230179028,
+            "precision": 0.927461139896373,
+            "recall": 0.9040404040404041,
+            "support": 198
+          },
+          {
+            "class": "BOMBAY",
+            "f1": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "support": 79
+          },
+          {
+            "class": "CALI",
+            "f1": 0.9304174950298211,
+            "precision": 0.9069767441860465,
+            "recall": 0.9551020408163265,
+            "support": 245
+          },
+          {
+            "class": "DERMASON",
+            "f1": 0.9087415946205571,
+            "precision": 0.9292730844793713,
+            "recall": 0.8890977443609023,
+            "support": 532
+          },
+          {
+            "class": "HOROZ",
+            "f1": 0.9393414211438474,
+            "precision": 0.9409722222222222,
+            "recall": 0.9377162629757786,
+            "support": 289
+          },
+          {
+            "class": "SIRA",
+            "f1": 0.8557089084065245,
+            "precision": 0.8482587064676617,
+            "recall": 0.8632911392405064,
+            "support": 395
+          }
+        ]
+      }
+    },
+    {
+      "base_model_id": "logistic_regression",
+      "cv_accuracy_mean": 0.9076319290099232,
+      "cv_balanced_accuracy_mean": 0.9173246729930848,
+      "cv_log_loss_mean": 0.2577022077904204,
+      "cv_macro_f1_mean": 0.9199408569203312,
+      "cv_macro_f1_std": 0.002834555538225011,
+      "cv_macro_recall_mean": 0.9173246729930848,
+      "cv_weighted_f1_mean": 0.907832021516864,
+      "duration_seconds": 0.9604326053522527,
+      "eligible": true,
+      "failures": [],
+      "family": "LogisticRegression",
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "ConvexArea",
+        "Extent",
+        "ShapeFactor2"
+      ],
+      "feature_count": 7,
+      "feature_policy": "without_confirmed_derived",
+      "fold_metrics": [
+        {
+          "accuracy": 0.9008394543546695,
+          "balanced_accuracy": 0.91448032302272,
+          "fold": 1,
+          "log_loss": 0.2530758832310815,
+          "macro_f1": 0.9171862437669588,
+          "macro_recall": 0.91448032302272,
+          "weighted_f1": 0.9014374031052534
+        },
+        {
+          "accuracy": 0.9050367261280168,
+          "balanced_accuracy": 0.9148151620997683,
+          "fold": 2,
+          "log_loss": 0.2594899367153089,
+          "macro_f1": 0.9163756627153118,
+          "macro_recall": 0.9148151620997683,
+          "weighted_f1": 0.9051107346183168
+        },
+        {
+          "accuracy": 0.90498687664042,
+          "balanced_accuracy": 0.9181346613870647,
+          "fold": 3,
+          "log_loss": 0.27434296459423074,
+          "macro_f1": 0.9202100154531047,
+          "macro_recall": 0.9181346613870647,
+          "weighted_f1": 0.905263366053825
+        },
+        {
+          "accuracy": 0.9154855643044619,
+          "balanced_accuracy": 0.9184674784825864,
+          "fold": 4,
+          "log_loss": 0.24362494952386307,
+          "macro_f1": 0.9221009067435072,
+          "macro_recall": 0.9184674784825864,
+          "weighted_f1": 0.9156463754212795
+        },
+        {
+          "accuracy": 0.9118110236220472,
+          "balanced_accuracy": 0.9207257399732851,
+          "fold": 5,
+          "log_loss": 0.25797730488761766,
+          "macro_f1": 0.9238314559227737,
+          "macro_recall": 0.9207257399732851,
+          "weighted_f1": 0.9117022283856459
+        }
+      ],
+      "model_id": "logistic_regression__without_confirmed_derived",
+      "number_of_fits": 5,
+      "selected_hyperparameters": {
+        "model__C": 1.0,
+        "model__class_weight": null
+      },
+      "validation": {
+        "confusion_matrix": {
+          "class_order": [
+            "SEKER",
+            "BARBUNYA",
+            "BOMBAY",
+            "CALI",
+            "DERMASON",
+            "HOROZ",
+            "SIRA"
+          ],
+          "counts": [
+            [
+              288,
+              2,
+              0,
+              0,
+              4,
+              0,
+              10
+            ],
+            [
+              1,
+              166,
+              0,
+              26,
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              0,
+              79,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              7,
+              0,
+              234,
+              0,
+              1,
+              2
+            ],
+            [
+              11,
+              0,
+              0,
+              0,
+              473,
+              0,
+              48
+            ],
+            [
+              0,
+              1,
+              0,
+              9,
+              4,
+              266,
+              9
+            ],
+            [
+              6,
+              3,
+              0,
+              0,
+              38,
+              11,
+              337
+            ]
+          ],
+          "row_normalized": [
+            [
+              0.9473684210526315,
+              0.006578947368421052,
+              0.0,
+              0.0,
+              0.013157894736842105,
+              0.0,
+              0.03289473684210526
+            ],
+            [
+              0.005050505050505051,
+              0.8383838383838383,
+              0.0,
+              0.13131313131313133,
+              0.0,
+              0.005050505050505051,
+              0.020202020202020204
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.004081632653061225,
+              0.02857142857142857,
+              0.0,
+              0.9551020408163265,
+              0.0,
+              0.004081632653061225,
+              0.00816326530612245
+            ],
+            [
+              0.020676691729323307,
+              0.0,
+              0.0,
+              0.0,
+              0.8890977443609023,
+              0.0,
+              0.09022556390977443
+            ],
+            [
+              0.0,
+              0.0034602076124567475,
+              0.0,
+              0.031141868512110725,
+              0.01384083044982699,
+              0.9204152249134948,
+              0.031141868512110725
+            ],
+            [
+              0.015189873417721518,
+              0.007594936708860759,
+              0.0,
+              0.0,
+              0.09620253164556962,
+              0.027848101265822784,
+              0.8531645569620253
+            ]
+          ]
+        },
+        "decision_rule": "argmax_class_score_or_probability",
+        "metrics": {
+          "accuracy": 0.9025465230166504,
+          "balanced_accuracy": 0.9147902609270313,
+          "log_loss": 0.2719613967308821,
+          "macro_f1": 0.9154058922135254,
+          "macro_recall": 0.9147902609270313,
+          "minimum_per_class_recall": 0.8383838383838383,
+          "row_count": 2042,
+          "weighted_f1": 0.902683700472381
+        },
+        "per_class": [
+          {
+            "class": "SEKER",
+            "f1": 0.9427168576104746,
+            "precision": 0.9381107491856677,
+            "recall": 0.9473684210526315,
+            "support": 304
+          },
+          {
+            "class": "BARBUNYA",
+            "f1": 0.8806366047745358,
+            "precision": 0.9273743016759777,
+            "recall": 0.8383838383838383,
+            "support": 198
+          },
+          {
+            "class": "BOMBAY",
+            "f1": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "support": 79
+          },
+          {
+            "class": "CALI",
+            "f1": 0.9105058365758755,
+            "precision": 0.8698884758364313,
+            "recall": 0.9551020408163265,
+            "support": 245
+          },
+          {
+            "class": "DERMASON",
+            "f1": 0.9000951474785919,
+            "precision": 0.9113680154142582,
+            "recall": 0.8890977443609023,
+            "support": 532
+          },
+          {
+            "class": "HOROZ",
+            "f1": 0.9366197183098591,
+            "precision": 0.953405017921147,
+            "recall": 0.9204152249134948,
+            "support": 289
+          },
+          {
+            "class": "SIRA",
+            "f1": 0.8372670807453416,
+            "precision": 0.8219512195121951,
+            "recall": 0.8531645569620253,
+            "support": 395
+          }
+        ]
+      }
+    },
+    {
+      "base_model_id": "logistic_regression",
+      "cv_accuracy_mean": 0.9218016320887485,
+      "cv_balanced_accuracy_mean": 0.9336507004594423,
+      "cv_log_loss_mean": 0.21936842007747864,
+      "cv_macro_f1_mean": 0.9348602281671351,
+      "cv_macro_f1_std": 0.0014216194856729845,
+      "cv_macro_recall_mean": 0.9336507004594423,
+      "cv_weighted_f1_mean": 0.9219451082886001,
+      "duration_seconds": 1.0510784052312374,
+      "eligible": true,
+      "failures": [],
+      "family": "LogisticRegression",
+      "feature_columns": [
+        "Area",
+        "Perimeter",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "AspectRatio",
+        "Eccentricity",
+        "ConvexArea",
+        "EquivDiameter",
+        "Extent",
+        "Solidity",
+        "Roundness",
+        "Compactness",
+        "ShapeFactor1",
+        "ShapeFactor3",
+        "ShapeFactor4"
+      ],
+      "feature_count": 15,
+      "feature_policy": "without_shape_factor_2",
+      "fold_metrics": [
+        {
+          "accuracy": 0.9176285414480587,
+          "balanced_accuracy": 0.9319961683276361,
+          "fold": 1,
+          "log_loss": 0.20804036758515226,
+          "macro_f1": 0.9330117980280478,
+          "macro_recall": 0.9319961683276361,
+          "weighted_f1": 0.917992650051539
+        },
+        {
+          "accuracy": 0.9218258132214061,
+          "balanced_accuracy": 0.934538114662894,
+          "fold": 2,
+          "log_loss": 0.22274791862697513,
+          "macro_f1": 0.9353276198671713,
+          "macro_recall": 0.934538114662894,
+          "weighted_f1": 0.9219164952049905
+        },
+        {
+          "accuracy": 0.9212598425196851,
+          "balanced_accuracy": 0.9353201609158683,
+          "fold": 3,
+          "log_loss": 0.23405947906479505,
+          "macro_f1": 0.9360361616861085,
+          "macro_recall": 0.9353201609158683,
+          "weighted_f1": 0.9214584268220133
+        },
+        {
+          "accuracy": 0.9280839895013123,
+          "balanced_accuracy": 0.9338990245753873,
+          "fold": 4,
+          "log_loss": 0.20320550427053993,
+          "macro_f1": 0.9365543218887679,
+          "macro_recall": 0.9338990245753873,
+          "weighted_f1": 0.9281770064254165
+        },
+        {
+          "accuracy": 0.9202099737532808,
+          "balanced_accuracy": 0.9325000338154265,
+          "fold": 5,
+          "log_loss": 0.22878883083993073,
+          "macro_f1": 0.9333712393655802,
+          "macro_recall": 0.9325000338154265,
+          "weighted_f1": 0.9201809629390415
+        }
+      ],
+      "model_id": "logistic_regression__without_shape_factor_2",
+      "number_of_fits": 5,
+      "selected_hyperparameters": {
+        "model__C": 1.0,
+        "model__class_weight": null
+      },
+      "validation": {
+        "confusion_matrix": {
+          "class_order": [
+            "SEKER",
+            "BARBUNYA",
+            "BOMBAY",
+            "CALI",
+            "DERMASON",
+            "HOROZ",
+            "SIRA"
+          ],
+          "counts": [
+            [
+              294,
+              2,
+              0,
+              0,
+              0,
+              0,
+              8
+            ],
+            [
+              1,
+              179,
+              0,
+              16,
+              0,
+              0,
+              2
+            ],
+            [
+              0,
+              0,
+              79,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              8,
+              0,
+              234,
+              0,
+              1,
+              1
+            ],
+            [
+              9,
+              0,
+              0,
+              0,
+              474,
+              4,
+              45
+            ],
+            [
+              0,
+              1,
+              0,
+              8,
+              4,
+              271,
+              5
+            ],
+            [
+              8,
+              3,
+              0,
+              0,
+              32,
+              12,
+              340
+            ]
+          ],
+          "row_normalized": [
+            [
+              0.9671052631578947,
+              0.006578947368421052,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.02631578947368421
+            ],
+            [
+              0.005050505050505051,
+              0.9040404040404041,
+              0.0,
+              0.08080808080808081,
+              0.0,
+              0.0,
+              0.010101010101010102
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.004081632653061225,
+              0.0326530612244898,
+              0.0,
+              0.9551020408163265,
+              0.0,
+              0.004081632653061225,
+              0.004081632653061225
+            ],
+            [
+              0.016917293233082706,
+              0.0,
+              0.0,
+              0.0,
+              0.8909774436090225,
+              0.007518796992481203,
+              0.08458646616541353
+            ],
+            [
+              0.0,
+              0.0034602076124567475,
+              0.0,
+              0.02768166089965398,
+              0.01384083044982699,
+              0.9377162629757786,
+              0.01730103806228374
+            ],
+            [
+              0.020253164556962026,
+              0.007594936708860759,
+              0.0,
+              0.0,
+              0.0810126582278481,
+              0.030379746835443037,
+              0.8607594936708861
+            ]
+          ]
+        },
+        "decision_rule": "argmax_class_score_or_probability",
+        "metrics": {
+          "accuracy": 0.9162585700293829,
+          "balanced_accuracy": 0.9308144154671876,
+          "log_loss": 0.22344498121112194,
+          "macro_f1": 0.9289169346846183,
+          "macro_recall": 0.9308144154671876,
+          "minimum_per_class_recall": 0.8607594936708861,
+          "row_count": 2042,
+          "weighted_f1": 0.9161935995673909
+        },
+        "per_class": [
+          {
+            "class": "SEKER",
+            "f1": 0.9529983792544571,
+            "precision": 0.939297124600639,
+            "recall": 0.9671052631578947,
+            "support": 304
+          },
+          {
+            "class": "BARBUNYA",
+            "f1": 0.9156010230179028,
+            "precision": 0.927461139896373,
+            "recall": 0.9040404040404041,
+            "support": 198
+          },
+          {
+            "class": "BOMBAY",
+            "f1": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "support": 79
+          },
+          {
+            "class": "CALI",
+            "f1": 0.9304174950298211,
+            "precision": 0.9069767441860465,
+            "recall": 0.9551020408163265,
+            "support": 245
+          },
+          {
+            "class": "DERMASON",
+            "f1": 0.9097888675623801,
+            "precision": 0.9294117647058824,
+            "recall": 0.8909774436090225,
+            "support": 532
+          },
+          {
+            "class": "HOROZ",
+            "f1": 0.9393414211438474,
+            "precision": 0.9409722222222222,
+            "recall": 0.9377162629757786,
+            "support": 289
+          },
+          {
+            "class": "SIRA",
+            "f1": 0.8542713567839196,
+            "precision": 0.8478802992518704,
+            "recall": 0.8607594936708861,
+            "support": 395
+          }
+        ]
+      }
+    }
+  ],
+  "primary_metric": "macro_f1",
+  "problem_type": "multiclass_classification",
+  "schema_version": "candidate-results.v2",
+  "selection": {
+    "candidate_eligibility": [
+      {
+        "cv_macro_f1_std": 0.0038247869053157375,
+        "eligible": true,
+        "family": "HistGradientBoostingClassifier",
+        "feature_policy": "all_features",
+        "margin_over_dummy_macro_f1": 0.8788293758034289,
+        "model_id": "hist_gradient_boosting__all_features",
+        "simplicity_rank": 3,
+        "validation_balanced_accuracy": 0.9391308599307318,
+        "validation_log_loss": 0.22517215001326799,
+        "validation_macro_f1": 0.9378814348554879,
+        "validation_minimum_per_class_recall": 0.8708860759493671
+      },
+      {
+        "cv_macro_f1_std": 0.004924224202905914,
+        "eligible": true,
+        "family": "HistGradientBoostingClassifier",
+        "feature_policy": "without_confirmed_derived",
+        "margin_over_dummy_macro_f1": 0.8609039851043945,
+        "model_id": "hist_gradient_boosting__without_confirmed_derived",
+        "simplicity_rank": 3,
+        "validation_balanced_accuracy": 0.9209089382588139,
+        "validation_log_loss": 0.278822692701108,
+        "validation_macro_f1": 0.9199560441564535,
+        "validation_minimum_per_class_recall": 0.8585858585858586
+      },
+      {
+        "cv_macro_f1_std": 0.004014395771272498,
+        "eligible": true,
+        "family": "HistGradientBoostingClassifier",
+        "feature_policy": "without_shape_factor_2",
+        "margin_over_dummy_macro_f1": 0.877624963194927,
+        "model_id": "hist_gradient_boosting__without_shape_factor_2",
+        "simplicity_rank": 3,
+        "validation_balanced_accuracy": 0.9381462280952386,
+        "validation_log_loss": 0.22958049353385007,
+        "validation_macro_f1": 0.936677022246986,
+        "validation_minimum_per_class_recall": 0.8632911392405064
+      },
+      {
+        "cv_macro_f1_std": 0.000995590911334026,
+        "eligible": true,
+        "family": "LogisticRegression",
+        "feature_policy": "all_features",
+        "margin_over_dummy_macro_f1": 0.8699206297298139,
+        "model_id": "logistic_regression__all_features",
+        "simplicity_rank": 0,
+        "validation_balanced_accuracy": 0.9309075506559733,
+        "validation_log_loss": 0.22251148648526908,
+        "validation_macro_f1": 0.9289726887818729,
+        "validation_minimum_per_class_recall": 0.8632911392405064
+      },
+      {
+        "cv_macro_f1_std": 0.002834555538225011,
+        "eligible": true,
+        "family": "LogisticRegression",
+        "feature_policy": "without_confirmed_derived",
+        "margin_over_dummy_macro_f1": 0.8563538331614664,
+        "model_id": "logistic_regression__without_confirmed_derived",
+        "simplicity_rank": 0,
+        "validation_balanced_accuracy": 0.9147902609270313,
+        "validation_log_loss": 0.2719613967308821,
+        "validation_macro_f1": 0.9154058922135254,
+        "validation_minimum_per_class_recall": 0.8383838383838383
+      },
+      {
+        "cv_macro_f1_std": 0.0014216194856729845,
+        "eligible": true,
+        "family": "LogisticRegression",
+        "feature_policy": "without_shape_factor_2",
+        "margin_over_dummy_macro_f1": 0.8698648756325593,
+        "model_id": "logistic_regression__without_shape_factor_2",
+        "simplicity_rank": 0,
+        "validation_balanced_accuracy": 0.9308144154671876,
+        "validation_log_loss": 0.22344498121112194,
+        "validation_macro_f1": 0.9289169346846183,
+        "validation_minimum_per_class_recall": 0.8607594936708861
+      }
+    ],
+    "dummy_macro_f1": 0.059052059052059055,
+    "eligible_model_ids": [
+      "hist_gradient_boosting__all_features",
+      "hist_gradient_boosting__without_shape_factor_2",
+      "logistic_regression__all_features",
+      "logistic_regression__without_shape_factor_2",
+      "hist_gradient_boosting__without_confirmed_derived",
+      "logistic_regression__without_confirmed_derived"
+    ],
+    "finalists": [
+      "hist_gradient_boosting__all_features",
+      "hist_gradient_boosting__without_shape_factor_2"
+    ],
+    "practical_tie": true,
+    "practical_tie_tolerance": 0.002,
+    "required_margin": 0.02,
+    "selected_feature_policy": "all_features",
+    "selected_model_family": "HistGradientBoostingClassifier",
+    "selected_model_id": "hist_gradient_boosting__all_features",
+    "selection_rationale": "Candidates within the declared validation macro-F1 tolerance were resolved by balanced accuracy, worst-class recall, CV stability, comparable log loss, simplicity, and stable model ID.",
+    "tie_break_order": [
+      "higher_validation_balanced_accuracy",
+      "higher_minimum_per_class_recall",
+      "lower_cv_macro_f1_std",
+      "lower_validation_log_loss_when_comparable",
+      "simpler_pipeline_or_model",
+      "stable_model_id"
+    ]
+  },
+  "test_partition_evaluated": false
+}
