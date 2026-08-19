@@ -1,620 +1,918 @@
-"""Tests for reusable feature-relationship exploration."""
+"""Tests for reusable feature-to-target relationship analysis."""
 
 from __future__ import annotations
 
 import pandas as pd
 import pytest
 
-from scripts.analyze_relationships import (
-    FeatureRelationshipAnalysisError,
-    analyze_feature_relationships,
-    analyze_numerical_feature_relationships,
-    plot_numerical_correlation_heatmap,
+from scripts.analyze_target_relationships import (
+    FeatureTargetAnalysisError,
+    analyze_feature_target_relationships,
 )
 
 
-def _report(
-    numerical: pd.DataFrame,
+def _analyze(
+    numerical: pd.DataFrame | None = None,
     categorical: pd.DataFrame | None = None,
-    *,
-    numerical_features: tuple[str, ...] | None = None,
-    categorical_features: tuple[str, ...] | None = None,
-    interaction_candidates: tuple[dict[str, object], ...] = (),
+    target: pd.Series | None = None,
+    **kwargs: object,
 ):
-    categorical = (
-        pd.DataFrame(index=numerical.index)
-        if categorical is None
-        else categorical
+    numerical_frame = (
+        numerical
+        if numerical is not None
+        else pd.DataFrame({"amount": [1.0, 2.0, 8.0, 9.0]})
     )
-    return analyze_feature_relationships(
-        numerical,
-        categorical,
-        numerical_features=(
-            tuple(numerical.columns)
-            if numerical_features is None
-            else numerical_features
-        ),
-        categorical_features=(
-            tuple(categorical.columns)
-            if categorical_features is None
-            else categorical_features
-        ),
-        interaction_candidates=interaction_candidates,
+    categorical_frame = (
+        categorical
+        if categorical is not None
+        else pd.DataFrame({"group": ["A", "A", "B", "B"]})
+    )
+    target_series = (
+        target
+        if target is not None
+        else pd.Series(["No", "No", "Yes", "Yes"], name="Churn")
+    )
+    options = {
+        "numerical_bin_count": 2,
+        "minimum_group_count": 2,
+    }
+    options.update(kwargs)
+    return analyze_feature_target_relationships(
+        numerical_frame=numerical_frame,
+        categorical_frame=categorical_frame,
+        target=target_series,
+        numerical_features=tuple(numerical_frame.columns),
+        categorical_features=tuple(categorical_frame.columns),
+        expected_target_classes=("No", "Yes"),
+        positive_class="Yes",
+        **options,
     )
 
 
-def test_perfect_positive_pearson_and_rank_correlation() -> None:
-    numerical = pd.DataFrame({"a": [1, 2, 3], "b": [2, 4, 6]})
+def test_valid_analysis_produces_all_report_tables() -> None:
+    report = _analyze()
 
-    report = _report(numerical)
+    assert report.is_analysis_ready
+    assert len(report.numerical_relationships_frame()) == 1
+    assert len(report.numerical_class_statistics_frame()) == 2
+    assert len(report.numerical_bins_frame()) == 2
+    assert len(report.categorical_relationships_frame()) == 1
+    assert len(report.categorical_rates_frame()) == 2
+    assert report.issues_frame().empty
+
+
+def test_positive_numerical_separation_preserves_metric_direction() -> None:
+    report = _analyze(
+        numerical=pd.DataFrame(
+            {"amount": [1.0, 2.0, 3.0, 8.0, 9.0, 10.0]}
+        ),
+        categorical=pd.DataFrame(
+            {"group": ["A", "A", "A", "B", "B", "B"]}
+        ),
+        target=pd.Series(["No", "No", "No", "Yes", "Yes", "Yes"]),
+    )
+
     row = report.numerical_relationships_frame().iloc[0]
-
-    assert row["Pearson correlation"] == pytest.approx(1.0)
-    assert row["Rank correlation"] == pytest.approx(1.0)
-    assert row["Strong association"]
-    assert row["Potential redundancy"]
-
-
-def test_perfect_negative_correlation() -> None:
-    numerical = pd.DataFrame({"a": [1, 2, 3], "b": [6, 4, 2]})
-
-    row = _report(numerical).numerical_relationships_frame().iloc[0]
-
-    assert row["Pearson correlation"] == pytest.approx(-1.0)
-    assert row["Rank correlation"] == pytest.approx(-1.0)
+    assert row["Mean difference"] == pytest.approx(7.0)
+    assert row["Point-biserial correlation"] > 0
+    assert row["Cohen's d"] > 0
+    assert row["Eta squared"] > 0
+    assert bool(row["Review flag"])
 
 
-def test_rank_correlation_detects_monotonic_nonlinear_relation() -> None:
-    numerical = pd.DataFrame(
-        {"a": [1, 2, 3, 4], "b": [1, 4, 9, 16]}
+def test_negative_numerical_separation_preserves_metric_direction() -> None:
+    report = _analyze(
+        numerical=pd.DataFrame({"amount": [8.0, 9.0, 10.0, 1.0, 2.0, 3.0]}),
+        categorical=pd.DataFrame(
+            {"group": ["A", "A", "A", "B", "B", "B"]}
+        ),
+        target=pd.Series(["No", "No", "No", "Yes", "Yes", "Yes"]),
     )
 
-    row = _report(numerical).numerical_relationships_frame().iloc[0]
+    row = report.numerical_relationships_frame().iloc[0]
+    assert row["Mean difference"] == pytest.approx(-7.0)
+    assert row["Point-biserial correlation"] < 0
+    assert row["Cohen's d"] < 0
 
-    assert row["Rank correlation"] == pytest.approx(1.0)
-    assert row["Pearson correlation"] < 1.0
 
-
-def test_missing_numerical_pairs_are_excluded() -> None:
-    numerical = pd.DataFrame(
-        {"a": [1.0, None, 3.0], "b": [1.0, 2.0, None]}
+def test_no_numerical_difference_reports_limited_separation() -> None:
+    report = _analyze(
+        numerical=pd.DataFrame({"amount": [1.0, 2.0, 1.0, 2.0]}),
     )
 
-    row = _report(numerical).numerical_relationships_frame().iloc[0]
+    row = report.numerical_relationships_frame().iloc[0]
+    assert row["Mean difference"] == pytest.approx(0.0)
+    assert row["Point-biserial correlation"] == pytest.approx(0.0)
+    assert row["Cohen's d"] == pytest.approx(0.0)
+    assert not bool(row["Review flag"])
 
-    assert row["Valid paired rows"] == 1
-    assert row["Missing paired rows"] == 2
-    assert row["Pearson correlation"] is None
+
+def test_class_statistics_preserve_expected_target_order() -> None:
+    report = _analyze()
+    statistics = report.numerical_class_statistics_frame()
+
+    assert list(statistics["Target class"]) == ["No", "Yes"]
+    assert list(statistics["Mean"]) == [1.5, 8.5]
+
+
+def test_numerical_missing_values_are_excluded_pairwise() -> None:
+    report = _analyze(
+        numerical=pd.DataFrame({"amount": [1.0, None, 8.0, 9.0]}),
+    )
+
+    row = report.numerical_relationships_frame().iloc[0]
+    assert row["Valid paired rows"] == 3
+    assert row["Missing paired rows"] == 1
+    statistics = report.numerical_class_statistics_frame()
+    assert list(statistics["Valid numeric count"]) == [1, 2]
 
 
 def test_constant_numerical_feature_is_reported() -> None:
-    numerical = pd.DataFrame({"a": [1, 1, 1], "b": [1, 2, 3]})
-
-    report = _report(numerical)
+    report = _analyze(
+        numerical=pd.DataFrame({"amount": [1.0, 1.0, 1.0, 1.0]}),
+    )
 
     assert report.has_constant_features
-    assert "Constant numerical feature" in set(
-        report.issues_frame()["Issue"]
-    )
-    with pytest.raises(
-        FeatureRelationshipAnalysisError,
-        match="constant_features_detected",
-    ):
-        report.raise_if_invalid(require_sufficient_variation=True)
+    row = report.numerical_relationships_frame().iloc[0]
+    assert row["Point-biserial correlation"] is None
+    assert row["Cohen's d"] is None
+    assert report.numerical_bins_frame().empty
 
 
-def test_numerical_matrix_is_symmetric_with_unit_diagonal() -> None:
-    numerical = pd.DataFrame(
-        {"a": [1, 2, 3], "b": [2, 4, 6], "c": [3, 1, 2]}
-    )
-
-    matrix = _report(numerical).numerical_correlation_matrix()
-
-    pd.testing.assert_frame_equal(matrix, matrix.T)
-    assert list(matrix.columns) == ["a", "b", "c"]
-    assert list(matrix.index) == ["a", "b", "c"]
-    assert all(matrix.loc[name, name] == 1.0 for name in matrix.columns)
-
-
-def test_rank_matrix_aliases_are_supported() -> None:
-    numerical = pd.DataFrame({"a": [1, 2, 3], "b": [1, 4, 9]})
-    report = _report(numerical)
-
-    pd.testing.assert_frame_equal(
-        report.numerical_correlation_matrix(method="rank"),
-        report.numerical_correlation_matrix(method="spearman"),
+def test_quantile_bins_report_rates_lift_and_support() -> None:
+    numerical = pd.DataFrame({"amount": list(range(1, 9))})
+    categorical = pd.DataFrame({"group": ["A"] * 4 + ["B"] * 4})
+    target = pd.Series(["No"] * 4 + ["Yes"] * 4)
+    report = analyze_feature_target_relationships(
+        numerical,
+        categorical,
+        target,
+        numerical_features=("amount",),
+        categorical_features=("group",),
+        expected_target_classes=("No", "Yes"),
+        positive_class="Yes",
+        numerical_bin_count=4,
+        minimum_group_count=3,
     )
 
-    with pytest.raises(FeatureRelationshipAnalysisError, match="method"):
-        report.numerical_correlation_matrix(method="kendall")
+    bins = report.numerical_bins_frame()
+    assert list(bins["Bin"]) == ["Q1", "Q2", "Q3", "Q4"]
+    assert list(bins["Positive-class rate"]) == [0.0, 0.0, 1.0, 1.0]
+    assert list(bins["Lift"]) == [0.0, 0.0, 2.0, 2.0]
+    assert bins["Low-support flag"].all()
 
 
-def test_cramers_v_is_one_for_perfect_association() -> None:
-    numerical = pd.DataFrame(index=range(4))
-    categorical = pd.DataFrame(
-        {"a": ["x", "x", "y", "y"], "b": ["m", "m", "n", "n"]}
+def test_quantile_bins_handle_duplicated_edges() -> None:
+    report = _analyze(
+        numerical=pd.DataFrame({"amount": [0, 0, 0, 1, 1, 1]}),
+        categorical=pd.DataFrame({"group": ["A"] * 3 + ["B"] * 3}),
+        target=pd.Series(["No", "No", "Yes", "No", "Yes", "Yes"]),
     )
 
-    row = _report(numerical, categorical).categorical_relationships_frame().iloc[0]
+    bins = report.numerical_bins_frame()
+    assert 1 <= len(bins) <= 2
+    assert bins["Row count"].sum() == 6
+
+
+def test_categorical_perfect_association_reports_high_values() -> None:
+    report = _analyze()
+    row = report.categorical_relationships_frame().iloc[0]
 
     assert row["Cramer's V"] == pytest.approx(1.0)
-    assert row["U(A | B)"] == pytest.approx(1.0)
-    assert row["U(B | A)"] == pytest.approx(1.0)
-    assert row["Potential redundancy"]
+    assert row["U(Target | Feature)"] == pytest.approx(1.0)
+    assert row["Positive-class rate spread"] == pytest.approx(1.0)
+    assert bool(row["Review flag"])
 
 
-def test_cramers_v_is_zero_for_balanced_independence() -> None:
-    numerical = pd.DataFrame(index=range(4))
-    categorical = pd.DataFrame(
-        {"a": ["x", "x", "y", "y"], "b": ["m", "n", "m", "n"]}
+def test_categorical_independence_reports_zero_association() -> None:
+    report = _analyze(
+        categorical=pd.DataFrame({"group": ["A", "B", "A", "B"]}),
     )
-
-    row = _report(numerical, categorical).categorical_relationships_frame().iloc[0]
+    row = report.categorical_relationships_frame().iloc[0]
 
     assert row["Cramer's V"] == pytest.approx(0.0)
-    assert row["U(A | B)"] == pytest.approx(0.0)
-    assert row["U(B | A)"] == pytest.approx(0.0)
+    assert row["U(Target | Feature)"] == pytest.approx(0.0)
+    assert row["Positive-class rate spread"] == pytest.approx(0.0)
+    assert not bool(row["Review flag"])
 
 
-def test_directional_dependency_is_not_mistaken_for_redundancy() -> None:
-    numerical = pd.DataFrame(index=range(6))
-    categorical = pd.DataFrame(
-        {
-            "base": ["No", "No", "Yes", "Yes", "Yes", "Yes"],
-            "detail": [
-                "No service",
-                "No service",
-                "A",
-                "B",
-                "A",
-                "B",
-            ],
-        }
+def test_categorical_rates_include_rate_difference_and_lift() -> None:
+    rates = _analyze().categorical_rates_frame()
+    a = rates.loc[rates["Category"].eq("A")].iloc[0]
+    b = rates.loc[rates["Category"].eq("B")].iloc[0]
+
+    assert a["Positive-class rate"] == pytest.approx(0.0)
+    assert a["Rate difference"] == pytest.approx(-0.5)
+    assert a["Lift"] == pytest.approx(0.0)
+    assert b["Positive-class rate"] == pytest.approx(1.0)
+    assert b["Rate difference"] == pytest.approx(0.5)
+    assert b["Lift"] == pytest.approx(2.0)
+
+
+def test_odds_ratio_uses_zero_cell_correction() -> None:
+    rates = _analyze().categorical_rates_frame()
+
+    assert all(
+        value is not None and value > 0
+        for value in rates["Odds ratio versus remaining categories"]
     )
 
-    row = _report(numerical, categorical).categorical_relationships_frame().iloc[0]
 
-    assert row["U(A | B)"] == pytest.approx(1.0)
-    assert row["U(B | A)"] < 1.0
-    assert row["Structural dependency"]
-    assert not row["Potential redundancy"]
+def test_wilson_intervals_are_bounded_and_contain_observed_rate() -> None:
+    rates = _analyze().categorical_rates_frame()
+
+    for _, row in rates.iterrows():
+        assert 0 <= row["Wilson interval lower"] <= 1
+        assert 0 <= row["Wilson interval upper"] <= 1
+        assert (
+            row["Wilson interval lower"]
+            <= row["Positive-class rate"]
+            <= row["Wilson interval upper"]
+        )
+
+
+def test_expected_category_order_and_absent_category_are_preserved() -> None:
+    report = analyze_feature_target_relationships(
+        pd.DataFrame({"amount": [1, 2, 3, 4]}),
+        pd.DataFrame({"group": ["B", "A", "B", "A"]}),
+        pd.Series(["No", "No", "Yes", "Yes"]),
+        numerical_features=("amount",),
+        categorical_features=("group",),
+        expected_target_classes=("No", "Yes"),
+        positive_class="Yes",
+        expected_category_values={"group": ("A", "B", "C")},
+        numerical_bin_count=2,
+        minimum_group_count=1,
+    )
+
+    rates = report.categorical_rates_frame()
+    assert list(rates["Category"]) == ["A", "B", "C"]
+    assert list(rates["Expected category"]) == [True, True, True]
+    assert rates.iloc[2]["Row count"] == 0
+    assert pd.isna(rates.iloc[2]["Positive-class rate"])
+
+
+def test_unexpected_observed_category_is_appended_after_expected_values() -> None:
+    report = analyze_feature_target_relationships(
+        pd.DataFrame({"amount": [1, 2, 3, 4]}),
+        pd.DataFrame({"group": ["A", "Other", "A", "Other"]}),
+        pd.Series(["No", "No", "Yes", "Yes"]),
+        numerical_features=("amount",),
+        categorical_features=("group",),
+        expected_target_classes=("No", "Yes"),
+        positive_class="Yes",
+        expected_category_values={"group": ("A", "B")},
+        numerical_bin_count=2,
+        minimum_group_count=1,
+    )
+
+    rates = report.categorical_rates_frame()
+    assert list(rates["Category"]) == ["A", "B", "Other"]
+    assert list(rates["Expected category"]) == [True, True, False]
+
+
+def test_integer_category_is_supported() -> None:
+    report = _analyze(
+        categorical=pd.DataFrame(
+            {"SeniorCitizen": pd.Series([0, 0, 1, 1], dtype="int64")}
+        ),
+    )
+
+    rates = report.categorical_rates_frame()
+    assert list(rates["Category"]) == [0, 1]
+    assert list(rates["Positive-class rate"]) == [0.0, 1.0]
+
+
+def test_pandas_string_dtype_and_blanks_are_supported() -> None:
+    report = _analyze(
+        categorical=pd.DataFrame(
+            {
+                "group": pd.Series(
+                    [" A ", "", "B", "B"],
+                    dtype="string",
+                )
+            }
+        ),
+    )
+
+    row = report.categorical_relationships_frame().iloc[0]
+    assert row["Valid paired rows"] == 3
+    assert row["Missing paired rows"] == 1
+    assert list(report.categorical_rates_frame()["Category"]) == ["A", "B"]
 
 
 def test_constant_categorical_feature_is_reported() -> None:
-    numerical = pd.DataFrame(index=range(3))
-    categorical = pd.DataFrame({"a": ["x"] * 3, "b": ["m", "n", "m"]})
-
-    report = _report(numerical, categorical)
+    report = _analyze(
+        categorical=pd.DataFrame({"group": ["A", "A", "A", "A"]}),
+    )
 
     assert report.has_constant_features
-    assert report.categorical_relationships_frame().iloc[0]["Cramer's V"] is None
+    row = report.categorical_relationships_frame().iloc[0]
+    assert row["Cramer's V"] is None
+    assert row["U(Target | Feature)"] is None
 
 
-def test_blank_and_missing_categories_are_excluded() -> None:
-    numerical = pd.DataFrame(index=range(5))
-    categorical = pd.DataFrame(
-        {"a": ["x", " ", None, "y", "y"], "b": ["m", "m", "n", "n", "n"]}
+def test_low_support_categories_are_reported() -> None:
+    report = analyze_feature_target_relationships(
+        pd.DataFrame({"amount": [1, 2, 3, 4, 5]}),
+        pd.DataFrame({"group": ["A", "A", "A", "A", "B"]}),
+        pd.Series(["No", "No", "Yes", "Yes", "Yes"]),
+        numerical_features=("amount",),
+        categorical_features=("group",),
+        expected_target_classes=("No", "Yes"),
+        positive_class="Yes",
+        numerical_bin_count=2,
+        minimum_group_count=2,
     )
 
-    row = _report(numerical, categorical).categorical_relationships_frame().iloc[0]
-
-    assert row["Valid paired rows"] == 3
-    assert row["Missing paired rows"] == 2
-
-
-def test_pandas_string_dtype_is_supported_without_mutation() -> None:
-    numerical = pd.DataFrame(index=range(4))
-    categorical = pd.DataFrame(
-        {
-            "a": pd.Series(["x", "x", "y", "y"], dtype="string"),
-            "b": pd.Series(["m", "m", "n", "n"], dtype="string"),
-        }
-    )
-    original = categorical.copy(deep=True)
-
-    report = _report(numerical, categorical)
-
-    assert report.categorical_relationships_frame().iloc[0]["Cramer's V"] == pytest.approx(1.0)
-    pd.testing.assert_frame_equal(categorical, original)
+    assert report.has_low_support_groups
+    relationship = report.categorical_relationships_frame().iloc[0]
+    assert relationship["Low-support category count"] == 1
 
 
-def test_categorical_matrix_is_symmetric_with_unit_diagonal() -> None:
-    numerical = pd.DataFrame(index=range(4))
-    categorical = pd.DataFrame(
-        {
-            "a": ["x", "x", "y", "y"],
-            "b": ["m", "m", "n", "n"],
-            "c": ["q", "r", "q", "r"],
-        }
+def test_missing_target_values_block_analysis_and_are_reported() -> None:
+    report = _analyze(
+        target=pd.Series(["No", None, "Yes", "Yes"]),
     )
 
-    matrix = _report(numerical, categorical).categorical_association_matrix()
-
-    pd.testing.assert_frame_equal(matrix, matrix.T)
-    assert all(matrix.loc[name, name] == 1.0 for name in matrix.columns)
-
-
-def test_eta_squared_is_one_for_separated_groups() -> None:
-    numerical = pd.DataFrame({"value": [0.0, 0.0, 10.0, 10.0]})
-    categorical = pd.DataFrame({"group": ["a", "a", "b", "b"]})
-
-    row = _report(numerical, categorical).mixed_relationships_frame().iloc[0]
-
-    assert row["Eta squared"] == pytest.approx(1.0)
-    assert row["Strong association"]
+    assert report.has_missing_target_values
+    assert not report.is_analysis_ready
+    assert report.numerical_relationships_frame().empty
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="missing_target_values:1",
+    ):
+        report.raise_if_invalid()
 
 
-def test_eta_squared_is_zero_when_group_means_are_equal() -> None:
-    numerical = pd.DataFrame({"value": [0.0, 10.0, 0.0, 10.0]})
-    categorical = pd.DataFrame({"group": ["a", "a", "b", "b"]})
-
-    row = _report(numerical, categorical).mixed_relationships_frame().iloc[0]
-
-    assert row["Eta squared"] == pytest.approx(0.0)
-
-
-def test_single_category_mixed_relation_is_undefined() -> None:
-    numerical = pd.DataFrame({"value": [1.0, 2.0, 3.0]})
-    categorical = pd.DataFrame({"group": ["a", "a", "a"]})
-
-    report = _report(numerical, categorical)
-    row = report.mixed_relationships_frame().iloc[0]
-
-    assert row["Eta squared"] is None
-    assert report.has_constant_features
-
-
-def test_mixed_matrix_preserves_declared_order() -> None:
-    numerical = pd.DataFrame({"n2": [1, 2, 3, 4], "n1": [4, 3, 2, 1]})
-    categorical = pd.DataFrame({"c2": ["a", "a", "b", "b"], "c1": ["x", "y", "x", "y"]})
-
-    report = analyze_feature_relationships(
-        numerical,
-        categorical,
-        numerical_features=("n2", "n1"),
-        categorical_features=("c2", "c1"),
-    )
-    matrix = report.mixed_association_matrix()
-
-    assert list(matrix.index) == ["c2", "c1"]
-    assert list(matrix.columns) == ["n2", "n1"]
-
-
-def test_product_interaction_is_analyzed() -> None:
-    numerical = pd.DataFrame(
-        {
-            "tenure": [1.0, 2.0, 3.0],
-            "monthly": [10.0, 20.0, 30.0],
-            "total": [10.0, 40.0, 90.0],
-        }
-    )
-    candidate = (
-        {
-            "name": "tenure_monthly_product",
-            "left": "tenure",
-            "right": "monthly",
-            "operation": "product",
-            "compare_to": "total",
-        },
+def test_unexpected_target_class_blocks_analysis() -> None:
+    report = _analyze(
+        target=pd.Series(["No", "No", "Yes", "Unknown"]),
     )
 
-    row = _report(
-        numerical,
-        interaction_candidates=candidate,
-    ).interactions_frame().iloc[0]
-
-    assert row["Pearson correlation"] == pytest.approx(1.0)
-    assert row["Mean absolute difference"] == pytest.approx(0.0)
-    assert row["Median absolute difference"] == pytest.approx(0.0)
-    assert row["Mean relative difference"] == pytest.approx(0.0)
-    assert row["Potential redundancy"]
+    assert report.has_unexpected_target_classes
+    assert report.unexpected_target_classes == ("Unknown",)
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="unexpected_target_classes:'Unknown'",
+    ):
+        report.raise_if_invalid()
 
 
-def test_interaction_ignores_zero_denominator_for_relative_difference() -> None:
-    numerical = pd.DataFrame(
-        {"a": [0.0, 2.0], "b": [1.0, 2.0], "c": [0.0, 5.0]}
-    )
-    candidate = (
-        {
-            "name": "ab",
-            "left": "a",
-            "right": "b",
-            "operation": "product",
-            "compare_to": "c",
-        },
+def test_missing_expected_target_class_is_reported() -> None:
+    report = _analyze(
+        target=pd.Series(["No", "No", "No", "No"]),
     )
 
-    row = _report(numerical, interaction_candidates=candidate).interactions_frame().iloc[0]
+    assert report.has_missing_expected_target_classes
+    assert report.missing_expected_target_classes == ("Yes",)
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="positive_class_not_observed",
+    ):
+        report.raise_if_invalid()
 
-    assert row["Mean relative difference"] == pytest.approx(0.2)
 
-
-def test_missing_interaction_feature_is_reported() -> None:
-    numerical = pd.DataFrame({"a": [1, 2], "b": [2, 3]})
-    candidate = (
-        {
-            "name": "missing",
-            "left": "a",
-            "right": "b",
-            "operation": "product",
-            "compare_to": "c",
-        },
+def test_non_binary_target_contract_is_rejected_by_validation() -> None:
+    report = analyze_feature_target_relationships(
+        pd.DataFrame({"amount": [1, 2, 3]}),
+        pd.DataFrame({"group": ["A", "B", "C"]}),
+        pd.Series(["A", "B", "C"]),
+        numerical_features=("amount",),
+        categorical_features=("group",),
+        expected_target_classes=("A", "B", "C"),
+        positive_class="C",
+        numerical_bin_count=2,
+        minimum_group_count=1,
     )
 
-    report = _report(numerical, interaction_candidates=candidate)
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="target_contract_is_not_binary",
+    ):
+        report.raise_if_invalid()
 
-    assert report.interactions_frame().empty
-    assert "Interaction feature missing" in set(report.issues_frame()["Issue"])
 
-
-def test_indices_must_align_for_mixed_relationships() -> None:
-    numerical = pd.DataFrame({"value": [1, 2]}, index=[0, 1])
-    categorical = pd.DataFrame({"group": ["a", "b"]}, index=[1, 2])
-
-    report = _report(numerical, categorical)
+def test_indices_must_align_even_when_lengths_match() -> None:
+    report = _analyze(
+        numerical=pd.DataFrame(
+            {"amount": [1.0, 2.0, 8.0, 9.0]},
+            index=[0, 1, 2, 3],
+        ),
+        categorical=pd.DataFrame(
+            {"group": ["A", "A", "B", "B"]},
+            index=[0, 1, 2, 3],
+        ),
+        target=pd.Series(
+            ["No", "No", "Yes", "Yes"],
+            index=[1, 2, 3, 4],
+        ),
+    )
 
     assert report.has_alignment_issues
-    assert report.mixed_relationships_frame().empty
+    assert report.numerical_relationships_frame().empty
     with pytest.raises(
-        FeatureRelationshipAnalysisError,
+        FeatureTargetAnalysisError,
         match="projection_indices_not_aligned",
     ):
         report.raise_if_invalid()
 
 
-def test_missing_features_are_reported() -> None:
-    numerical = pd.DataFrame({"a": [1, 2]})
-    categorical = pd.DataFrame({"c": ["x", "y"]})
-
-    report = analyze_feature_relationships(
-        numerical,
-        categorical,
-        numerical_features=("a", "missing_n"),
-        categorical_features=("c", "missing_c"),
+def test_missing_requested_features_are_reported() -> None:
+    report = analyze_feature_target_relationships(
+        pd.DataFrame({"amount": [1, 2, 3, 4]}),
+        pd.DataFrame({"group": ["A", "A", "B", "B"]}),
+        pd.Series(["No", "No", "Yes", "Yes"]),
+        numerical_features=("amount", "missing_number"),
+        categorical_features=("group", "missing_category"),
+        expected_target_classes=("No", "Yes"),
+        positive_class="Yes",
+        numerical_bin_count=2,
+        minimum_group_count=1,
     )
 
     assert report.has_missing_features
-    assert report.missing_numerical_features == ("missing_n",)
-    assert report.missing_categorical_features == ("missing_c",)
-    with pytest.raises(FeatureRelationshipAnalysisError, match="missing_numerical_features"):
+    assert report.missing_numerical_features == ("missing_number",)
+    assert report.missing_categorical_features == ("missing_category",)
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="missing_numerical_features:missing_number",
+    ):
         report.raise_if_invalid()
 
 
 def test_duplicate_feature_names_are_rejected() -> None:
-    frame = pd.DataFrame({"a": [1, 2]})
-
-    with pytest.raises(FeatureRelationshipAnalysisError, match="duplicate"):
-        analyze_feature_relationships(
-            frame,
-            pd.DataFrame(index=frame.index),
-            numerical_features=("a", "a"),
-            categorical_features=(),
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="contains duplicate names",
+    ):
+        analyze_feature_target_relationships(
+            pd.DataFrame({"amount": [1, 2]}),
+            pd.DataFrame({"group": ["A", "B"]}),
+            pd.Series(["No", "Yes"]),
+            numerical_features=("amount", "amount"),
+            categorical_features=("group",),
+            expected_target_classes=("No", "Yes"),
+            positive_class="Yes",
         )
 
 
-def test_duplicated_dataframe_columns_are_rejected() -> None:
-    numerical = pd.DataFrame([[1, 2]], columns=["a", "a"])
-
-    with pytest.raises(FeatureRelationshipAnalysisError, match="duplicated column labels"):
-        analyze_feature_relationships(
-            numerical,
-            pd.DataFrame(index=numerical.index),
-            numerical_features=("a",),
-            categorical_features=(),
-        )
-
-
-def test_invalid_threshold_is_rejected() -> None:
-    frame = pd.DataFrame({"a": [1, 2]})
-
-    with pytest.raises(FeatureRelationshipAnalysisError, match="between 0 and 1"):
-        analyze_feature_relationships(
-            frame,
-            pd.DataFrame(index=frame.index),
-            numerical_features=("a",),
-            categorical_features=(),
-            strong_numerical_threshold=1.1,
-        )
-
-
-def test_invalid_interaction_operation_is_rejected() -> None:
-    frame = pd.DataFrame({"a": [1, 2], "b": [2, 3], "c": [3, 4]})
-
-    with pytest.raises(FeatureRelationshipAnalysisError, match="Unsupported interaction operation"):
-        _report(
-            frame,
-            interaction_candidates=(
-                {
-                    "name": "invalid",
-                    "left": "a",
-                    "right": "b",
-                    "operation": "sum",
-                    "compare_to": "c",
-                },
-            ),
-        )
-
-
-def test_duplicate_interaction_names_are_rejected() -> None:
-    frame = pd.DataFrame({"a": [1, 2], "b": [2, 3], "c": [3, 4]})
-    candidate = {
-        "name": "same",
-        "left": "a",
-        "right": "b",
-        "operation": "product",
-        "compare_to": "c",
-    }
-
-    with pytest.raises(FeatureRelationshipAnalysisError, match="names must be unique"):
-        _report(
-            frame,
-            interaction_candidates=(candidate, candidate),
-        )
-
-
-def test_returned_frames_are_defensive_copies() -> None:
-    numerical = pd.DataFrame({"a": [1, 2, 3], "b": [2, 4, 6]})
-    report = _report(numerical)
-
-    relationships = report.numerical_relationships_frame()
-    matrix = report.numerical_correlation_matrix()
-    relationships.loc[0, "Pearson correlation"] = 0.0
-    matrix.loc["a", "b"] = 0.0
-
-    assert report.numerical_relationships_frame().loc[0, "Pearson correlation"] == pytest.approx(1.0)
-    assert report.numerical_correlation_matrix().loc["a", "b"] == pytest.approx(1.0)
-
-
-def test_input_frames_are_not_mutated() -> None:
-    numerical = pd.DataFrame({"a": [1, 2, 3], "b": [2, 4, 6]})
-    categorical = pd.DataFrame({"c": ["x", "y", "x"], "d": ["m", "n", "m"]})
-    numerical_original = numerical.copy(deep=True)
-    categorical_original = categorical.copy(deep=True)
-
-    _report(numerical, categorical)
-
-    pd.testing.assert_frame_equal(numerical, numerical_original)
-    pd.testing.assert_frame_equal(categorical, categorical_original)
-
-
-def test_summary_reports_expected_pair_counts() -> None:
-    numerical = pd.DataFrame({"a": [1, 2, 3], "b": [2, 3, 4], "c": [3, 4, 5]})
-    categorical = pd.DataFrame({"x": ["a", "b", "a"], "y": ["m", "n", "m"]})
-
-    summary = _report(numerical, categorical).summary_frame().set_index("Metric")
-
-    assert summary.loc["Numerical relationships", "Value"] == 3
-    assert summary.loc["Categorical relationships", "Value"] == 1
-    assert summary.loc["Categorical-numerical relationships", "Value"] == 6
-
-
-def test_numerical_wrapper_uses_empty_categorical_projection() -> None:
-    frame = pd.DataFrame(
-        {
-            "a": [1.0, 2.0, 3.0],
-            "b": [2.0, 4.0, 6.0],
-            "c": [3.0, 1.0, 2.0],
-        }
+def test_duplicated_dataframe_columns_are_reported() -> None:
+    numerical = pd.DataFrame(
+        [[1, 2], [3, 4], [5, 6], [7, 8]],
+        columns=["amount", "amount"],
     )
-
-    report = analyze_numerical_feature_relationships(
-        frame,
-        features=("a", "b", "c"),
-        strong_association_threshold=0.8,
-        redundancy_review_threshold=0.9,
+    report = analyze_feature_target_relationships(
+        numerical,
+        pd.DataFrame({"group": ["A", "A", "B", "B"]}),
+        pd.Series(["No", "No", "Yes", "Yes"]),
+        numerical_features=("amount",),
+        categorical_features=("group",),
+        expected_target_classes=("No", "Yes"),
+        positive_class="Yes",
+        numerical_bin_count=2,
+        minimum_group_count=1,
     )
-
-    assert report.requested_categorical_features == ()
-    assert report.available_categorical_features == ()
-    assert len(report.numerical_relationships_frame()) == 3
-
-
-def test_numerical_review_frame_filters_and_sorts_strong_pairs() -> None:
-    frame = pd.DataFrame(
-        {
-            "a": [1.0, 2.0, 3.0, 4.0],
-            "b": [2.0, 4.0, 6.0, 8.0],
-            "c": [1.0, 4.0, 9.0, 16.0],
-            "d": [0.0, 1.0, 0.0, 1.0],
-        }
-    )
-    report = analyze_numerical_feature_relationships(
-        frame,
-        features=("a", "b", "c", "d"),
-        strong_association_threshold=0.8,
-        redundancy_review_threshold=0.9,
-    )
-
-    review = report.numerical_review_frame()
-
-    assert not review.empty
-    assert list(review.columns) == [
-        "Feature A",
-        "Feature B",
-        "Pearson correlation",
-        "Rank correlation",
-        "Maximum absolute association",
-        "Potential redundancy",
-        "Interpretation",
-    ]
-    assert review.iloc[0]["Potential redundancy"]
-    assert (
-        review["Maximum absolute association"]
-        .ge(report.strong_numerical_threshold)
-        .all()
-    )
-
-
-def test_numerical_review_frame_accepts_explicit_threshold() -> None:
-    frame = pd.DataFrame(
-        {
-            "a": [1.0, 2.0, 3.0, 4.0],
-            "b": [1.0, 2.0, 4.0, 3.0],
-        }
-    )
-    report = analyze_numerical_feature_relationships(
-        frame,
-        features=("a", "b"),
-    )
-
-    assert report.numerical_review_frame(
-        minimum_absolute_association=0.0
-    ).shape[0] == 1
 
     with pytest.raises(
-        FeatureRelationshipAnalysisError,
-        match="minimum_absolute_association",
+        FeatureTargetAnalysisError,
+        match="duplicated_column_labels",
     ):
-        report.numerical_review_frame(
-            minimum_absolute_association=1.1
+        report.raise_if_invalid()
+
+
+def test_positive_class_must_be_declared() -> None:
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="must belong",
+    ):
+        analyze_feature_target_relationships(
+            pd.DataFrame({"amount": [1, 2]}),
+            pd.DataFrame({"group": ["A", "B"]}),
+            pd.Series(["No", "Yes"]),
+            numerical_features=("amount",),
+            categorical_features=("group",),
+            expected_target_classes=("No", "Yes"),
+            positive_class="Maybe",
         )
 
 
-def test_correlation_heatmap_returns_figure_without_mutating_report() -> None:
-    from matplotlib import pyplot as plt
+def test_invalid_thresholds_and_counts_are_rejected() -> None:
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="numerical_bin_count must be at least 2",
+    ):
+        _analyze(numerical_bin_count=1)
 
-    frame = pd.DataFrame(
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="minimum_group_count must be at least 1",
+    ):
+        _analyze(minimum_group_count=0)
+
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="must be at most 1",
+    ):
+        _analyze(rate_difference_review_threshold=1.1)
+
+
+def test_expected_category_contract_rejects_undeclared_feature() -> None:
+    with pytest.raises(
+        FeatureTargetAnalysisError,
+        match="undeclared feature",
+    ):
+        _analyze(expected_category_values={"other": ("A", "B")})
+
+
+def test_inputs_are_not_mutated_and_outputs_are_defensive_copies() -> None:
+    numerical = pd.DataFrame({"amount": [1.0, 2.0, 8.0, 9.0]})
+    categorical = pd.DataFrame(
+        {"group": pd.Series([" A ", "A", "B", "B"], dtype="string")}
+    )
+    target = pd.Series(["No", "No", "Yes", "Yes"], name="Churn")
+    numerical_before = numerical.copy(deep=True)
+    categorical_before = categorical.copy(deep=True)
+    target_before = target.copy(deep=True)
+
+    report = _analyze(
+        numerical=numerical,
+        categorical=categorical,
+        target=target,
+    )
+    first = report.categorical_rates_frame()
+    first.loc[:, "Row count"] = -1
+    second = report.categorical_rates_frame()
+
+    pd.testing.assert_frame_equal(numerical, numerical_before)
+    pd.testing.assert_frame_equal(categorical, categorical_before)
+    pd.testing.assert_series_equal(target, target_before)
+    assert not second["Row count"].eq(-1).any()
+
+
+def test_results_are_deterministic() -> None:
+    first = _analyze()
+    second = _analyze()
+
+    pd.testing.assert_frame_equal(
+        first.numerical_relationships_frame(),
+        second.numerical_relationships_frame(),
+    )
+    pd.testing.assert_frame_equal(
+        first.categorical_rates_frame(),
+        second.categorical_rates_frame(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Multiclass numerical feature-to-target analysis
+# ---------------------------------------------------------------------------
+
+from scripts.analyze_target_relationships import (
+    analyze_multiclass_numerical_target_relationships,
+    plot_multiclass_feature_target_associations,
+)
+
+
+def _multiclass_frame() -> pd.DataFrame:
+    return pd.DataFrame(
         {
-            "a": [1.0, 2.0, 3.0],
-            "b": [2.0, 4.0, 6.0],
-            "c": [3.0, 1.0, 2.0],
+            "separated": [1.0, 1.2, 1.1, 5.0, 5.2, 5.1, 9.0, 9.2, 9.1],
+            "overlap": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+            "Class": ["A"] * 3 + ["B"] * 3 + ["C"] * 3,
         }
     )
-    report = analyze_numerical_feature_relationships(
+
+
+def test_multiclass_analysis_uses_unordered_target_without_positive_class() -> None:
+    report = analyze_multiclass_numerical_target_relationships(
+        _multiclass_frame(),
+        features=("separated", "overlap"),
+        target="Class",
+        expected_target_classes=("A", "B", "C"),
+        association_review_threshold=0.10,
+    )
+
+    assert report.is_analysis_ready
+    assert report.expected_target_classes == ("A", "B", "C")
+    assert report.has_review_candidates
+    assert "Positive-class count" not in report.relationships_frame().columns
+
+
+def test_multiclass_eta_squared_identifies_mean_separation() -> None:
+    report = analyze_multiclass_numerical_target_relationships(
+        _multiclass_frame(),
+        features=("separated", "overlap"),
+        target="Class",
+        expected_target_classes=("A", "B", "C"),
+        association_review_threshold=0.10,
+    )
+    relationships = report.relationships_frame().set_index("Feature")
+
+    assert relationships.loc["separated", "Eta squared"] > 0.99
+    assert relationships.loc["overlap", "Eta squared"] == pytest.approx(0.0)
+    assert bool(relationships.loc["separated", "Review flag"])
+    assert not bool(relationships.loc["overlap", "Review flag"])
+
+
+def test_multiclass_rank_eta_squared_is_bounded() -> None:
+    report = analyze_multiclass_numerical_target_relationships(
+        _multiclass_frame(),
+        features=("separated",),
+        target="Class",
+        expected_target_classes=("A", "B", "C"),
+    )
+    value = report.relationships_frame().iloc[0]["Rank eta squared"]
+    assert 0.0 <= value <= 1.0
+
+
+def test_multiclass_class_statistics_preserve_contract_order() -> None:
+    report = analyze_multiclass_numerical_target_relationships(
+        _multiclass_frame(),
+        features=("separated",),
+        target="Class",
+        expected_target_classes=("C", "A", "B"),
+    )
+    statistics = report.class_statistics_frame()
+    assert list(statistics["Target class"]) == ["C", "A", "B"]
+
+
+def test_multiclass_missing_feature_blocks_validation() -> None:
+    report = analyze_multiclass_numerical_target_relationships(
+        _multiclass_frame(),
+        features=("separated", "missing"),
+        target="Class",
+        expected_target_classes=("A", "B", "C"),
+    )
+    assert report.missing_features == ("missing",)
+    with pytest.raises(FeatureTargetAnalysisError, match="missing_features"):
+        report.raise_if_invalid()
+
+
+def test_multiclass_unexpected_target_class_blocks_validation() -> None:
+    frame = _multiclass_frame()
+    frame.loc[0, "Class"] = "OTHER"
+    report = analyze_multiclass_numerical_target_relationships(
         frame,
-        features=("a", "b", "c"),
+        features=("separated",),
+        target="Class",
+        expected_target_classes=("A", "B", "C"),
     )
-    before = report.numerical_correlation_matrix()
+    assert report.has_unexpected_target_classes
+    with pytest.raises(FeatureTargetAnalysisError, match="unexpected_target_classes"):
+        report.raise_if_invalid()
 
-    figure = plot_numerical_correlation_heatmap(
-        report,
-        method="pearson",
-        title="Test heatmap",
+
+def test_multiclass_constant_feature_can_be_required_to_vary() -> None:
+    frame = _multiclass_frame().assign(constant=1.0)
+    report = analyze_multiclass_numerical_target_relationships(
+        frame,
+        features=("constant",),
+        target="Class",
+        expected_target_classes=("A", "B", "C"),
+    )
+    assert report.has_constant_features
+    with pytest.raises(FeatureTargetAnalysisError, match="constant_features"):
+        report.raise_if_invalid(require_sufficient_variation=True)
+
+
+def test_multiclass_plot_returns_figure_without_mutating_report() -> None:
+    pytest.importorskip("matplotlib")
+    report = analyze_multiclass_numerical_target_relationships(
+        _multiclass_frame(),
+        features=("separated", "overlap"),
+        target="Class",
+        expected_target_classes=("A", "B", "C"),
+    )
+    before = report.relationships_frame()
+    figure = plot_multiclass_feature_target_associations(report)
+    try:
+        assert len(figure.axes) == 1
+        pd.testing.assert_frame_equal(before, report.relationships_frame())
+    finally:
+        import matplotlib.pyplot as plt
+        plt.close(figure)
+
+# ---------------------------------------------------------------------------
+# Continuous-regression numerical feature-to-target analysis
+# ---------------------------------------------------------------------------
+
+from scripts.analyze_target_relationships import (
+    ContinuousFeatureTargetRelationshipReport,
+    analyze_continuous_numerical_target_relationships,
+    plot_continuous_feature_target_associations,
+)
+
+
+def _continuous_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "positive": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "negative": [6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+            "weak": [1.0, 4.0, 2.0, 5.0, 3.0, 6.0],
+            "strength": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+        }
     )
 
-    assert figure.axes[0].get_title() == "Test heatmap"
-    pd.testing.assert_frame_equal(
-        report.numerical_correlation_matrix(),
-        before,
+
+def test_continuous_analysis_preserves_signed_pearson_and_spearman() -> None:
+    report = analyze_continuous_numerical_target_relationships(
+        _continuous_frame(),
+        features=("positive", "negative"),
+        target="strength",
+        unit="MPa",
+        association_review_threshold=0.30,
     )
-    plt.close(figure)
+    relationships = report.relationships_frame().set_index("Feature")
+
+    assert report.is_analysis_ready
+    assert relationships.loc["positive", "Pearson correlation"] == pytest.approx(1.0)
+    assert relationships.loc["positive", "Spearman correlation"] == pytest.approx(1.0)
+    assert relationships.loc["negative", "Pearson correlation"] == pytest.approx(-1.0)
+    assert relationships.loc["negative", "Spearman correlation"] == pytest.approx(-1.0)
 
 
-def test_numerical_summary_omits_irrelevant_categorical_metrics() -> None:
+def test_continuous_relationships_are_ranked_by_maximum_absolute_association() -> None:
+    report = analyze_continuous_numerical_target_relationships(
+        _continuous_frame(),
+        features=("weak", "positive"),
+        target="strength",
+        association_review_threshold=0.30,
+    )
+
+    relationships = report.relationships_frame()
+    assert relationships.iloc[0]["Feature"] == "positive"
+    assert relationships.iloc[0]["Maximum absolute association"] == pytest.approx(1.0)
+
+
+def test_continuous_review_flag_uses_maximum_absolute_correlation() -> None:
     frame = pd.DataFrame(
-        {"a": [1.0, 2.0, 3.0], "b": [2.0, 4.0, 6.0]}
+        {
+            "feature": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "target": [2.0, 1.0, 4.0, 3.0, 5.0],
+        }
     )
-    report = analyze_numerical_feature_relationships(
+    report = analyze_continuous_numerical_target_relationships(
         frame,
-        features=("a", "b"),
-        strong_association_threshold=0.8,
-        redundancy_review_threshold=0.9,
+        features=("feature",),
+        target="target",
+        association_review_threshold=0.70,
+    )
+    row = report.relationships_frame().iloc[0]
+
+    assert row["Maximum absolute association"] == pytest.approx(
+        max(
+            abs(row["Pearson correlation"]),
+            abs(row["Spearman correlation"]),
+        )
+    )
+    assert bool(row["Review flag"]) == (
+        row["Maximum absolute association"] >= 0.70
     )
 
-    summary = report.numerical_summary_frame().set_index("Metric")
 
-    assert summary.loc["Numerical features", "Value"] == 2
-    assert summary.loc["Feature pairs", "Value"] == 1
-    assert summary.loc["Strong-association pairs", "Value"] == 1
-    assert summary.loc["Redundancy-review candidates", "Value"] == 1
-    assert "Categorical relationships" not in summary.index
+def test_continuous_summary_preserves_target_unit() -> None:
+    report = analyze_continuous_numerical_target_relationships(
+        _continuous_frame(),
+        features=("positive",),
+        target="strength",
+        unit="MPa",
+    )
+    summary = report.summary_frame().set_index("Metric")
+
+    assert summary.loc["Target", "Value"] == "strength (MPa)"
+    assert summary.loc["Target unique values", "Value"] == 6
+
+
+def test_continuous_missing_feature_blocks_validation() -> None:
+    report = analyze_continuous_numerical_target_relationships(
+        _continuous_frame(),
+        features=("positive", "missing"),
+        target="strength",
+    )
+
+    assert report.missing_features == ("missing",)
+    with pytest.raises(FeatureTargetAnalysisError, match="missing_features:missing"):
+        report.raise_if_invalid()
+
+
+def test_continuous_missing_target_blocks_validation() -> None:
+    frame = _continuous_frame()
+    frame.loc[0, "strength"] = None
+    report = analyze_continuous_numerical_target_relationships(
+        frame,
+        features=("positive",),
+        target="strength",
+    )
+
+    assert report.has_missing_target_values
+    assert not report.is_analysis_ready
+    with pytest.raises(FeatureTargetAnalysisError, match="missing_target_values:1"):
+        report.raise_if_invalid()
+
+
+def test_continuous_non_numeric_and_non_finite_target_values_are_invalid() -> None:
+    frame = _continuous_frame().astype(object)
+    frame.loc[0, "strength"] = "not-a-number"
+    frame.loc[1, "strength"] = float("inf")
+    report = analyze_continuous_numerical_target_relationships(
+        frame,
+        features=("positive",),
+        target="strength",
+    )
+
+    assert report.invalid_target_count == 2
+    assert not report.is_analysis_ready
+    with pytest.raises(FeatureTargetAnalysisError, match="invalid_target_values:2"):
+        report.raise_if_invalid()
+
+
+def test_continuous_constant_target_is_rejected() -> None:
+    frame = _continuous_frame()
+    frame.loc[:, "strength"] = 10.0
+    report = analyze_continuous_numerical_target_relationships(
+        frame,
+        features=("positive",),
+        target="strength",
+    )
+
+    assert report.has_constant_target
+    with pytest.raises(FeatureTargetAnalysisError, match="constant_target_detected"):
+        report.raise_if_invalid()
+
+
+def test_continuous_constant_feature_is_reported_and_optionally_rejected() -> None:
+    frame = _continuous_frame()
+    frame.loc[:, "positive"] = 1.0
+    report = analyze_continuous_numerical_target_relationships(
+        frame,
+        features=("positive",),
+        target="strength",
+    )
+    row = report.relationships_frame().iloc[0]
+
+    assert report.has_constant_features
+    assert pd.isna(row["Pearson correlation"])
+    assert pd.isna(row["Spearman correlation"])
+    with pytest.raises(FeatureTargetAnalysisError, match="constant_features_detected"):
+        report.raise_if_invalid(require_sufficient_feature_variation=True)
+
+
+def test_continuous_inputs_and_report_frames_are_defensive() -> None:
+    frame = _continuous_frame()
+    before = frame.copy(deep=True)
+    report = analyze_continuous_numerical_target_relationships(
+        frame,
+        features=("positive", "negative"),
+        target="strength",
+    )
+
+    first = report.relationships_frame()
+    first.loc[:, "Review flag"] = False
+    second = report.relationships_frame()
+
+    pd.testing.assert_frame_equal(frame, before)
+    assert second["Review flag"].any()
+
+
+def test_continuous_plot_returns_figure_without_mutating_report() -> None:
+    report = analyze_continuous_numerical_target_relationships(
+        _continuous_frame(),
+        features=("positive", "negative", "weak"),
+        target="strength",
+    )
+    before = report.relationships_frame()
+
+    figure = plot_continuous_feature_target_associations(report)
+
+    assert figure.axes
+    pd.testing.assert_frame_equal(report.relationships_frame(), before)
+
+
+def test_continuous_invalid_threshold_and_unit_are_rejected() -> None:
+    with pytest.raises(FeatureTargetAnalysisError, match="must be at most 1"):
+        analyze_continuous_numerical_target_relationships(
+            _continuous_frame(),
+            features=("positive",),
+            target="strength",
+            association_review_threshold=1.1,
+        )
+
+    with pytest.raises(FeatureTargetAnalysisError, match="unit must be"):
+        analyze_continuous_numerical_target_relationships(
+            _continuous_frame(),
+            features=("positive",),
+            target="strength",
+            unit="",
+        )
+
+
+def test_continuous_report_type_is_explicit() -> None:
+    report = analyze_continuous_numerical_target_relationships(
+        _continuous_frame(),
+        features=("positive",),
+        target="strength",
+    )
+
+    assert isinstance(report, ContinuousFeatureTargetRelationshipReport)
+

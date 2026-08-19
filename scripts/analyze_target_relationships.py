@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from math import log, sqrt
+from math import isfinite, log, sqrt
 from numbers import Integral, Real
 from typing import Final
 
@@ -2009,3 +2009,475 @@ def _multiclass_numerical_class_statistics(
             }
         rows.append(row)
     return rows
+
+# ---------------------------------------------------------------------------
+# Continuous-regression numerical feature-to-target analysis
+# ---------------------------------------------------------------------------
+
+_CONTINUOUS_NUMERICAL_RELATIONSHIP_COLUMNS: Final[list[str]] = [
+    "Feature",
+    "Valid paired rows",
+    "Excluded paired rows",
+    "Pearson correlation",
+    "Spearman correlation",
+    "Absolute Pearson correlation",
+    "Absolute Spearman correlation",
+    "Maximum absolute association",
+    "Review flag",
+    "Interpretation",
+]
+
+_CONTINUOUS_ISSUE_COLUMNS: Final[list[str]] = [
+    "Scope",
+    "Feature",
+    "Issue",
+    "Details",
+    "Potential impact",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class ContinuousFeatureTargetRelationshipReport:
+    """Summarize univariate numerical relationships with a continuous target."""
+
+    requested_features: tuple[str, ...]
+    available_features: tuple[str, ...]
+    missing_features: tuple[str, ...]
+    target_name: str
+    target_unit: str | None
+    row_count: int
+    missing_target_count: int
+    invalid_target_count: int
+    target_unique_count: int
+    association_review_threshold: float
+    relationships: pd.DataFrame
+    issues: pd.DataFrame
+
+    @property
+    def has_missing_features(self) -> bool:
+        return bool(self.missing_features)
+
+    @property
+    def has_missing_target_values(self) -> bool:
+        return self.missing_target_count > 0
+
+    @property
+    def has_invalid_target_values(self) -> bool:
+        return self.invalid_target_count > 0
+
+    @property
+    def has_constant_target(self) -> bool:
+        return self.target_unique_count < 2
+
+    @property
+    def has_constant_features(self) -> bool:
+        if self.issues.empty:
+            return False
+        return bool(self.issues["Issue"].eq("Constant numerical feature").any())
+
+    @property
+    def has_review_candidates(self) -> bool:
+        if self.relationships.empty:
+            return False
+        return bool(self.relationships["Review flag"].any())
+
+    @property
+    def is_analysis_ready(self) -> bool:
+        return not (
+            self.has_missing_features
+            or self.has_missing_target_values
+            or self.has_invalid_target_values
+            or self.has_constant_target
+        )
+
+    def summary_frame(self) -> pd.DataFrame:
+        """Return a compact continuous feature-to-target summary."""
+        candidates = (
+            0
+            if self.relationships.empty
+            else int(self.relationships["Review flag"].sum())
+        )
+        target_label = self.target_name
+        if self.target_unit:
+            target_label = f"{target_label} ({self.target_unit})"
+        rows = [
+            {
+                "Metric": "Rows",
+                "Value": self.row_count,
+                "Interpretation": "Observations supplied to the analysis",
+            },
+            {
+                "Metric": "Numerical features",
+                "Value": len(self.requested_features),
+                "Interpretation": "Candidate numerical features requested",
+            },
+            {
+                "Metric": "Target",
+                "Value": target_label,
+                "Interpretation": "Continuous regression outcome",
+            },
+            {
+                "Metric": "Target unique values",
+                "Value": self.target_unique_count,
+                "Interpretation": "Observed finite numerical target values",
+            },
+            {
+                "Metric": "Association review threshold",
+                "Value": self.association_review_threshold,
+                "Interpretation": (
+                    "Applied to max(|Pearson|, |Spearman|); review only"
+                ),
+            },
+            {
+                "Metric": "Review candidates",
+                "Value": candidates,
+                "Interpretation": (
+                    "Features meeting the exploratory association threshold"
+                ),
+            },
+        ]
+        return pd.DataFrame(rows, columns=_SUMMARY_COLUMNS)
+
+    def relationships_frame(self) -> pd.DataFrame:
+        """Return feature-level continuous association evidence."""
+        if self.relationships.empty:
+            return self.relationships.copy(deep=True)
+        return self.relationships.sort_values(
+            ["Maximum absolute association", "Feature"],
+            ascending=[False, True],
+            na_position="last",
+        ).reset_index(drop=True)
+
+    def review_frame(self) -> pd.DataFrame:
+        """Return only features reaching the exploratory review threshold."""
+        frame = self.relationships_frame()
+        if frame.empty:
+            return frame
+        return frame.loc[frame["Review flag"]].reset_index(drop=True)
+
+    def issues_frame(self) -> pd.DataFrame:
+        """Return structural conditions that may limit interpretation."""
+        return self.issues.copy(deep=True)
+
+    def raise_if_invalid(
+        self,
+        *,
+        require_features_present: bool = True,
+        require_numeric_target: bool = True,
+        require_no_missing_target: bool = True,
+        require_target_variation: bool = True,
+        require_sufficient_feature_variation: bool = False,
+    ) -> None:
+        """Raise when configured continuous-analysis requirements fail."""
+        failures: list[str] = []
+
+        if require_features_present and self.missing_features:
+            failures.append("missing_features:" + ",".join(self.missing_features))
+
+        if require_numeric_target and self.has_invalid_target_values:
+            failures.append(f"invalid_target_values:{self.invalid_target_count}")
+
+        if require_no_missing_target and self.has_missing_target_values:
+            failures.append(f"missing_target_values:{self.missing_target_count}")
+
+        if require_target_variation and self.has_constant_target:
+            failures.append("constant_target_detected")
+
+        if require_sufficient_feature_variation and self.has_constant_features:
+            failures.append("constant_features_detected")
+
+        if failures:
+            raise FeatureTargetAnalysisError(
+                "Continuous feature-to-target analysis is invalid: "
+                + "; ".join(failures)
+            )
+
+
+def analyze_continuous_numerical_target_relationships(
+    dataframe: pd.DataFrame,
+    *,
+    features: Sequence[str],
+    target: str,
+    unit: str | None = None,
+    association_review_threshold: Real = 0.30,
+) -> ContinuousFeatureTargetRelationshipReport:
+    """Analyze numerical features against a continuous regression target.
+
+    Pearson correlation captures linear association and direction. Spearman
+    correlation captures monotonic association on ranks and is therefore less
+    sensitive to scale and strictly linear form. Both are exploratory
+    univariate evidence only; neither metric selects or removes features.
+    """
+    _validate_dataframe(dataframe, name="dataframe")
+
+    requested_features = _normalize_feature_names(features, name="features")
+    if not isinstance(target, str) or not target.strip():
+        raise FeatureTargetAnalysisError("target must be a non-empty string.")
+    target_name = target.strip()
+
+    if unit is not None:
+        if not isinstance(unit, str) or not unit.strip():
+            raise FeatureTargetAnalysisError(
+                "unit must be None or a non-empty string."
+            )
+        normalized_unit = unit.strip()
+    else:
+        normalized_unit = None
+
+    threshold = _validate_unit_threshold(
+        association_review_threshold,
+        name="association_review_threshold",
+    )
+
+    source = dataframe.copy(deep=True)
+    if source.columns.duplicated().any():
+        raise FeatureTargetAnalysisError(
+            "dataframe must not contain duplicated column labels."
+        )
+    if target_name not in source.columns:
+        raise FeatureTargetAnalysisError(
+            f"Target column {target_name!r} is not present in dataframe."
+        )
+
+    available_features = tuple(
+        feature for feature in requested_features if feature in source.columns
+    )
+    missing_features = tuple(
+        feature for feature in requested_features if feature not in source.columns
+    )
+
+    target_raw = source[target_name].copy(deep=True)
+    target_numeric = pd.to_numeric(target_raw, errors="coerce")
+
+    missing_target_mask = target_raw.isna()
+    invalid_target_mask = (
+        (~missing_target_mask)
+        & (
+            target_numeric.isna()
+            | target_numeric.map(
+                lambda value: False
+                if pd.isna(value)
+                else not isfinite(float(value))
+            )
+        )
+    )
+    finite_target_mask = (
+        ~missing_target_mask
+        & ~invalid_target_mask
+        & target_numeric.notna()
+    )
+
+    missing_target_count = int(missing_target_mask.sum())
+    invalid_target_count = int(invalid_target_mask.sum())
+    target_unique_count = int(
+        target_numeric.loc[finite_target_mask].nunique(dropna=True)
+    )
+
+    issues: list[dict[str, object]] = []
+    for feature in missing_features:
+        issues.append(_missing_feature_issue("Numerical", feature))
+
+    if missing_target_count:
+        issues.append(
+            {
+                "Scope": "Target contract",
+                "Feature": None,
+                "Issue": "Missing target values",
+                "Details": f"count={missing_target_count}",
+                "Potential impact": (
+                    "Unlabelled rows cannot support supervised relationships."
+                ),
+            }
+        )
+
+    if invalid_target_count:
+        issues.append(
+            {
+                "Scope": "Target contract",
+                "Feature": None,
+                "Issue": "Invalid continuous target values",
+                "Details": f"count={invalid_target_count}",
+                "Potential impact": (
+                    "Non-numeric or non-finite outcomes cannot support "
+                    "continuous association metrics."
+                ),
+            }
+        )
+
+    if target_unique_count < 2:
+        issues.append(
+            {
+                "Scope": "Target contract",
+                "Feature": None,
+                "Issue": "Constant continuous target",
+                "Details": f"unique finite values={target_unique_count}",
+                "Potential impact": (
+                    "Correlation with a target lacking variation is undefined."
+                ),
+            }
+        )
+
+    relationship_rows: list[dict[str, object]] = []
+    can_analyze = (
+        not missing_features
+        and missing_target_count == 0
+        and invalid_target_count == 0
+        and target_unique_count >= 2
+    )
+
+    if can_analyze:
+        for feature in available_features:
+            raw_feature = source[feature].copy(deep=True)
+            numeric_feature = pd.to_numeric(raw_feature, errors="coerce")
+            finite_feature_mask = numeric_feature.map(
+                lambda value: False
+                if pd.isna(value)
+                else isfinite(float(value))
+            )
+            paired_mask = finite_feature_mask & finite_target_mask
+            paired = pd.DataFrame(
+                {
+                    "feature": numeric_feature.loc[paired_mask].astype(float),
+                    "target": target_numeric.loc[paired_mask].astype(float),
+                }
+            )
+            excluded_paired_rows = len(source) - len(paired)
+
+            if paired["feature"].nunique(dropna=True) < 2:
+                issues.append(_constant_feature_issue("Numerical", feature))
+                pearson = None
+                spearman = None
+            else:
+                pearson_value = paired["feature"].corr(
+                    paired["target"],
+                    method="pearson",
+                )
+                spearman_value = paired["feature"].corr(
+                    paired["target"],
+                    method="spearman",
+                )
+                pearson = (
+                    None if pd.isna(pearson_value) else float(pearson_value)
+                )
+                spearman = (
+                    None if pd.isna(spearman_value) else float(spearman_value)
+                )
+
+            abs_pearson = None if pearson is None else abs(pearson)
+            abs_spearman = None if spearman is None else abs(spearman)
+            candidates = [
+                value
+                for value in (abs_pearson, abs_spearman)
+                if value is not None
+            ]
+            maximum_association = max(candidates) if candidates else None
+            review_flag = bool(
+                maximum_association is not None
+                and maximum_association >= threshold
+            )
+            interpretation = (
+                "Meets the exploratory univariate association review threshold"
+                if review_flag
+                else "Below the exploratory univariate association review threshold"
+            )
+
+            relationship_rows.append(
+                {
+                    "Feature": feature,
+                    "Valid paired rows": len(paired),
+                    "Excluded paired rows": excluded_paired_rows,
+                    "Pearson correlation": pearson,
+                    "Spearman correlation": spearman,
+                    "Absolute Pearson correlation": abs_pearson,
+                    "Absolute Spearman correlation": abs_spearman,
+                    "Maximum absolute association": maximum_association,
+                    "Review flag": review_flag,
+                    "Interpretation": interpretation,
+                }
+            )
+
+    return ContinuousFeatureTargetRelationshipReport(
+        requested_features=requested_features,
+        available_features=available_features,
+        missing_features=missing_features,
+        target_name=target_name,
+        target_unit=normalized_unit,
+        row_count=len(source),
+        missing_target_count=missing_target_count,
+        invalid_target_count=invalid_target_count,
+        target_unique_count=target_unique_count,
+        association_review_threshold=threshold,
+        relationships=pd.DataFrame(
+            relationship_rows,
+            columns=_CONTINUOUS_NUMERICAL_RELATIONSHIP_COLUMNS,
+        ),
+        issues=pd.DataFrame(issues, columns=_CONTINUOUS_ISSUE_COLUMNS),
+    )
+
+
+def plot_continuous_feature_target_associations(
+    report: ContinuousFeatureTargetRelationshipReport,
+    *,
+    title: str = "Continuous Feature-to-Target Associations",
+):
+    """Plot signed Pearson and Spearman correlations for each feature."""
+    if not isinstance(report, ContinuousFeatureTargetRelationshipReport):
+        raise FeatureTargetAnalysisError(
+            "report must be a ContinuousFeatureTargetRelationshipReport."
+        )
+    frame = report.relationships_frame()
+    if frame.empty:
+        raise FeatureTargetAnalysisError(
+            "No continuous relationship evidence is available to plot."
+        )
+
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:  # pragma: no cover - notebook dependency
+        raise FeatureTargetAnalysisError(
+            "matplotlib is required to plot feature-to-target associations."
+        ) from exc
+
+    plot_frame = frame.sort_values(
+        ["Maximum absolute association", "Feature"],
+        ascending=[True, True],
+        na_position="first",
+    ).reset_index(drop=True)
+    positions = list(range(len(plot_frame)))
+    offset = 0.20
+    figure_height = max(4.5, 0.38 * len(plot_frame) + 1.5)
+    figure, axis = plt.subplots(figsize=(10, figure_height))
+    axis.barh(
+        [position - offset for position in positions],
+        plot_frame["Pearson correlation"].fillna(0.0),
+        height=0.36,
+        label="Pearson",
+    )
+    axis.barh(
+        [position + offset for position in positions],
+        plot_frame["Spearman correlation"].fillna(0.0),
+        height=0.36,
+        label="Spearman",
+    )
+    axis.axvline(0.0, linewidth=1)
+    axis.axvline(
+        report.association_review_threshold,
+        linestyle="--",
+        linewidth=1,
+        label=f"Review threshold (±{report.association_review_threshold:.2f})",
+    )
+    axis.axvline(
+        -report.association_review_threshold,
+        linestyle="--",
+        linewidth=1,
+    )
+    axis.set_yticks(positions)
+    axis.set_yticklabels(plot_frame["Feature"])
+    axis.set_xlim(left=-1.0, right=1.0)
+    axis.set_xlabel("Signed feature-to-target correlation")
+    axis.set_ylabel("Feature")
+    axis.set_title(title)
+    axis.legend()
+    figure.tight_layout()
+    return figure
+
