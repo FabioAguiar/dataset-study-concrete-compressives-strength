@@ -11,6 +11,7 @@ import pytest
 
 from scripts.build_exploration_handoff import (
     ExplorationHandoffError,
+    build_static_continuous_regression_exploration_handoff,
     build_static_multiclass_exploration_handoff,
     load_and_validate_exploration_handoff,
 )
@@ -212,6 +213,155 @@ class RelationshipReport:
     )
 
 
+class ContinuousTargetReport:
+    target = "Strength"
+    unit = "MPa"
+    row_count = 4
+    finite_count = 4
+    missing_count = 0
+    non_finite_count = 0
+    unique_count = 4
+    minimum = 10.0
+    mean = 25.0
+    median = 25.0
+    maximum = 40.0
+    standard_deviation = 12.909944
+    iqr = 15.0
+    extreme_count = 1
+    extreme_share = 0.25
+    has_variation = True
+
+    def issues_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(columns=["Issue", "Count", "Values", "Potential impact"])
+
+    def summary_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "Metric": "Mean",
+                    "Value": self.mean,
+                    "Interpretation": "Arithmetic mean in MPa",
+                },
+                {
+                    "Metric": "Outside 1.5-IQR fences",
+                    "Value": self.extreme_count,
+                    "Interpretation": "Descriptive only",
+                },
+            ]
+        )
+
+    def quantiles_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {"Quantile": "25%", "Value": 17.5, "Unit": "MPa"},
+                {"Quantile": "50%", "Value": 25.0, "Unit": "MPa"},
+                {"Quantile": "75%", "Value": 32.5, "Unit": "MPa"},
+            ]
+        )
+
+    def extremes_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "Side": "Upper",
+                    "Fence": 55.0,
+                    "Observed extreme": 40.0,
+                    "Count outside fence": 1,
+                }
+            ]
+        )
+
+
+class ContinuousLeakageReport:
+    is_structurally_valid = True
+    has_direct_target_leakage = False
+    confirmed_derived_dependency_count = 0
+
+    def target_proxy_candidates_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(columns=["Feature"])
+
+    def dependency_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "Derived feature",
+                "Dependency status",
+                "Target-derived",
+            ]
+        )
+
+
+class ContinuousInsightsReport:
+    is_structurally_valid = True
+
+    def key_insights_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "Insight ID": "INS-001",
+                    "Theme": "Regression structure",
+                    "Title": "Nonlinearity requires validation",
+                    "Relevance": "High",
+                    "Status": "Observed",
+                    "Summary": "Exploration shows nonlinear structure.",
+                    "Modeling implication": "Compare flexible candidates.",
+                    "Interpretation boundary": "EDA only.",
+                }
+            ]
+        )
+
+    def hypotheses_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "Hypothesis ID": "HYP-001",
+                    "Title": "Flexible regression may help",
+                    "Hypothesis": (
+                        "Nonlinear candidates may outperform an additive baseline."
+                    ),
+                    "Required validation": (
+                        "Compare candidates with leakage-safe validation."
+                    ),
+                }
+            ]
+        )
+
+    def limitations_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "Limitation ID": "LIM-001",
+                    "Title": "EDA is not performance",
+                    "Limitation type": "Modeling",
+                }
+            ]
+        )
+
+
+class ContinuousPreparationReport(PreparationReport):
+    def split_policy_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {"Policy item": "Train fraction", "Value": 0.70},
+                {"Policy item": "Validation fraction", "Value": 0.15},
+                {"Policy item": "Test fraction", "Value": 0.15},
+                {"Policy item": "Stratification field", "Value": None},
+                {"Policy item": "Random seed", "Value": 42},
+                {"Policy item": "Shuffle random split", "Value": True},
+                {"Policy item": "Final test holdout", "Value": True},
+                {"Policy item": "Disjoint partitions", "Value": True},
+                {"Policy item": "Identifier grouping", "Value": ()},
+                {
+                    "Policy item": "Temporal policy status",
+                    "Value": "Resolved snapshot fallback",
+                },
+                {
+                    "Policy item": "Random-split fallback",
+                    "Value": "Approved static snapshot fallback",
+                },
+            ]
+        )
+
+
 def source_dataframe() -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -221,6 +371,54 @@ def source_dataframe() -> pd.DataFrame:
             "Class": ["A", "B", "C"],
         }
     )
+
+
+def continuous_source_dataframe() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Cement": [100.0, 200.0, 300.0, 400.0],
+            "Age": [7, 28, 56, 90],
+            "Strength": [10.0, 20.0, 30.0, 40.0],
+        }
+    )
+
+
+def build_continuous_report(tmp_path: Path, **overrides):
+    source = tmp_path / "dataset.csv"
+    source.write_text(
+        "Cement,Age,Strength\n100,7,10\n",
+        encoding="utf-8",
+    )
+    params = {
+        "dataset_slug": "concrete-compressive-strength",
+        "source_repository": "UCI Machine Learning Repository",
+        "source_dataset_id": 165,
+        "source_file": source,
+        "project_root": tmp_path,
+        "source_dataframe": continuous_source_dataframe(),
+        "target_contract": SimpleNamespace(
+            target="Strength",
+            problem_type="continuous_regression",
+            target_semantics="Continuous / quantitative",
+            expected_unit="MPa",
+            source_unit="MPa",
+            prediction_output=(
+                "Continuous numeric value on the original target scale"
+            ),
+        ),
+        "feature_columns": ("Cement", "Age"),
+        "numerical_features": ("Cement", "Age"),
+        "identifier_columns": (),
+        "target_report": ContinuousTargetReport(),
+        "duplicate_report": DuplicateReport(),
+        "feature_relationship_report": RelationshipReport(),
+        "leakage_report": ContinuousLeakageReport(),
+        "quality_report": QualityReport(),
+        "insights_report": ContinuousInsightsReport(),
+        "preparation_report": ContinuousPreparationReport(),
+    }
+    params.update(overrides)
+    return build_static_continuous_regression_exploration_handoff(**params)
 
 
 def build_report(tmp_path: Path, **overrides):
@@ -399,3 +597,139 @@ def test_loader_rejects_wrong_source_dataset_id(tmp_path: Path) -> None:
             destination,
             expected_source_dataset_id=999,
         )
+
+def test_builds_ready_continuous_regression_handoff(tmp_path: Path) -> None:
+    report = build_continuous_report(tmp_path)
+
+    assert report.is_structurally_valid
+    assert report.is_handoff_ready
+    contract = report.payload["prediction_contract"]
+    assert contract["problem_type"] == "continuous_regression"
+    assert contract["target_classes"] == []
+    assert contract["class_semantics"] is None
+    assert contract["target_semantics"] == "Continuous / quantitative"
+    assert contract["target_unit"] == "MPa"
+    assert report.payload["target_distribution"]["finite_count"] == 4
+    assert (
+        report.payload["preparation_contract"]["split_policy"][
+            "stratification_field"
+        ]
+        is None
+    )
+    assert report.payload["readiness"]["model_selection_ready"] is False
+
+
+def test_continuous_handoff_carries_target_extreme_review(tmp_path: Path) -> None:
+    report = build_continuous_report(tmp_path)
+    reviews = report.open_reviews_frame()
+
+    assert "Target extremes" in set(reviews["theme"])
+    assert reviews["blocking"].eq(False).all()
+
+
+def test_continuous_next_steps_do_not_require_class_stratification(
+    tmp_path: Path,
+) -> None:
+    report = build_continuous_report(tmp_path)
+    steps = report.next_steps_frame()
+    text = " ".join(
+        steps.loc[
+            steps["Notebook"].eq("02_data_preparation.ipynb"),
+            ["Action", "Acceptance criterion"],
+        ]
+        .astype(str)
+        .to_numpy()
+        .ravel()
+    ).lower()
+
+    assert "non-stratified" in text
+    assert "target classes" not in text
+
+
+def test_continuous_handoff_write_is_reloadable(tmp_path: Path) -> None:
+    report = build_continuous_report(tmp_path)
+    destination = (
+        tmp_path
+        / "artifacts/exploration/concrete-compressive-strength/"
+        / "exploration-handoff.json"
+    )
+
+    persisted = report.write(destination)
+    payload = load_and_validate_exploration_handoff(
+        destination,
+        expected_dataset_slug="concrete-compressive-strength",
+        expected_source_dataset_id=165,
+    )
+
+    assert len(persisted.sha256) == 64
+    assert payload["prediction_contract"]["problem_type"] == "continuous_regression"
+    assert payload["prediction_contract"]["target_unit"] == "MPa"
+
+
+def test_continuous_handoff_rejects_stratification(tmp_path: Path) -> None:
+    preparation = ContinuousPreparationReport()
+    original = preparation.split_policy_frame
+
+    def stratified_split_policy() -> pd.DataFrame:
+        frame = original()
+        frame.loc[
+            frame["Policy item"].eq("Stratification field"),
+            "Value",
+        ] = "StrengthBin"
+        return frame
+
+    preparation.split_policy_frame = stratified_split_policy  # type: ignore[method-assign]
+    report = build_continuous_report(
+        tmp_path,
+        preparation_report=preparation,
+    )
+
+    assert not report.is_handoff_ready
+    assert report.issues_frame()["Issue"].str.contains(
+        "non-stratified"
+    ).any()
+
+
+def test_continuous_loader_rejects_target_classes(tmp_path: Path) -> None:
+    report = build_continuous_report(tmp_path)
+    destination = tmp_path / "handoff.json"
+    report.write(destination)
+
+    payload = json.loads(destination.read_text(encoding="utf-8"))
+    payload["prediction_contract"]["target_classes"] = ["low", "high"]
+    destination.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(
+        ExplorationHandoffError,
+        match="must not declare target classes",
+    ):
+        load_and_validate_exploration_handoff(destination)
+
+
+def test_continuous_loader_rejects_missing_semantics(tmp_path: Path) -> None:
+    report = build_continuous_report(tmp_path)
+    destination = tmp_path / "handoff.json"
+    report.write(destination)
+
+    payload = json.loads(destination.read_text(encoding="utf-8"))
+    payload["prediction_contract"]["target_semantics"] = ""
+    destination.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(
+        ExplorationHandoffError,
+        match="missing target semantics",
+    ):
+        load_and_validate_exploration_handoff(destination)
+
+
+def test_continuous_summary_uses_non_stratified_gate(tmp_path: Path) -> None:
+    report = build_continuous_report(tmp_path)
+    summary = report.summary_frame()
+
+    split_row = summary.loc[summary["Gate"].eq("Snapshot split may execute")]
+    assert len(split_row) == 1
+    assert split_row["Ready"].eq(True).all()
+    assert split_row["Interpretation"].str.contains(
+        "non-stratified"
+    ).all()
+
