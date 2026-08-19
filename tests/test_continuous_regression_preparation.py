@@ -30,22 +30,63 @@ from scripts.prepare_data import (
     validate_source_against_exploration_handoff,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
 SLUG = "concrete-compressive-strength"
-HANDOFF_PATH = ROOT / "artifacts/exploration" / SLUG / "exploration-handoff.json"
-RAW_ROOT = ROOT / "data/raw" / SLUG
 FEATURES = ("Cement", "Blast Furnace Slag", "Fly Ash", "Water", "Superplasticizer", "Coarse Aggregate", "Fine Aggregate", "Age")
 TARGET = "Concrete compressive strength"
 
 
 @pytest.fixture
-def handoff():
-    return load_and_validate_exploration_handoff(HANDOFF_PATH, expected_dataset_slug=SLUG, expected_source_dataset_id=165)
+def frame():
+    index = np.arange(1030, dtype=float)
+    data = {
+        column: index + offset + 1.0
+        for offset, column in enumerate(FEATURES)
+    }
+    data["Blast Furnace Slag"][:298] += 0.5
+    data[TARGET] = 5.0 + index * 0.075
+    return pd.DataFrame(data)
 
 
 @pytest.fixture
-def frame():
-    return pd.read_csv(RAW_ROOT / "dataset.csv")
+def handoff(tmp_path, frame):
+    raw_root = tmp_path / "data/raw" / SLUG
+    raw_root.mkdir(parents=True)
+    source = raw_root / "dataset.csv"
+    frame.to_csv(source, index=False)
+    (raw_root / "metadata.json").write_text(json.dumps({"uci_id": 165}))
+    pd.DataFrame({
+        "name": [*FEATURES, TARGET],
+        "role": [*["Feature"] * len(FEATURES), "Target"],
+        "type": ["Continuous", "Integer", *["Continuous"] * (len(FEATURES) - 2), "Continuous"],
+    }).to_csv(raw_root / "variables.csv", index=False)
+    payload = {
+        "schema_version": "exploration-handoff.v1",
+        "artifact_type": "exploration_handoff",
+        "dataset_slug": SLUG,
+        "source": {
+            "repository": "UCI Machine Learning Repository", "dataset_id": 165,
+            "path": source.relative_to(tmp_path).as_posix(), "sha256": fingerprint_file(source),
+            "row_count": len(frame), "column_count": len(frame.columns),
+            "column_order": list(frame.columns),
+        },
+        "prediction_contract": {
+            "problem_type": "continuous_regression", "target_column": TARGET,
+            "target_classes": [], "positive_class": None, "class_semantics": None,
+            "target_semantics": "Continuous / quantitative", "target_unit": "MPa",
+        },
+        "feature_contract": {
+            "feature_columns": list(FEATURES), "identifier_columns": [],
+            "baseline_feature_count": len(FEATURES),
+        },
+        "preparation_contract": {"decisions": [{
+            "Decision ID": "RESOLUTION-X", "Status": "Approved",
+            "Affected fields": ["Blast Furnace Slag"],
+            "Operation": "Preserve released decimal values exactly; do not round, truncate, or coerce to integer.",
+        }]},
+        "_test_root": str(tmp_path), "_metadata": str(raw_root / "metadata.json"),
+        "_variables": str(raw_root / "variables.csv"),
+    }
+    return payload
 
 
 @pytest.fixture
@@ -54,11 +95,13 @@ def policy():
 
 
 def source_gate(frame, handoff):
+    root = Path(handoff["_test_root"])
+    source = root / handoff["source"]["path"]
     return validate_source_against_exploration_handoff(
-        frame, handoff=handoff, source_file=RAW_ROOT / "dataset.csv",
-        project_root=ROOT, dataset_slug=SLUG,
+        frame, handoff=handoff, source_file=source,
+        project_root=root, dataset_slug=SLUG,
         source_repository="UCI Machine Learning Repository", source_dataset_id=165,
-        metadata_file=RAW_ROOT / "metadata.json", variables_file=RAW_ROOT / "variables.csv",
+        metadata_file=handoff["_metadata"], variables_file=handoff["_variables"],
     )
 
 
@@ -67,6 +110,37 @@ def test_real_continuous_source_contract_is_accepted(frame, handoff):
     assert report.problem_type == "continuous_regression"
     assert report.target_classes == ()
     assert report.feature_columns == FEATURES
+
+
+def test_generic_continuous_contract_has_no_concrete_assumptions(tmp_path):
+    frame = pd.DataFrame({"input_a": [1.25, 2.5, 3.75], "input_b": [2, 4, 6], "response": [7.1, 8.2, 9.3]})
+    source = tmp_path / "dataset.csv"
+    frame.to_csv(source, index=False)
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(json.dumps({"uci_id": 999}), encoding="utf-8")
+    variables = tmp_path / "variables.csv"
+    pd.DataFrame({
+        "name": list(frame.columns), "role": ["Feature", "Feature", "Target"],
+        "type": ["Continuous", "Integer", "Continuous"],
+    }).to_csv(variables, index=False)
+    handoff = {
+        "dataset_slug": "synthetic-regression",
+        "source": {"repository": "Synthetic Repository", "dataset_id": 999,
+                   "path": "dataset.csv", "sha256": fingerprint_file(source),
+                   "row_count": 3, "column_count": 3, "column_order": list(frame.columns)},
+        "prediction_contract": {"problem_type": "continuous_regression", "target_column": "response",
+                                "target_classes": [], "positive_class": None, "class_semantics": None,
+                                "target_semantics": "Continuous energy response", "target_unit": "kWh"},
+        "feature_contract": {"feature_columns": ["input_a", "input_b"], "identifier_columns": [],
+                             "baseline_feature_count": 2},
+        "preparation_contract": {"decisions": []},
+    }
+    report = validate_source_against_exploration_handoff(
+        frame, handoff=handoff, source_file=source, project_root=tmp_path,
+        dataset_slug="synthetic-regression", source_repository="Synthetic Repository",
+        source_dataset_id=999, metadata_file=metadata, variables_file=variables,
+    )
+    assert report.problem_type == "continuous_regression"
 
 
 @pytest.mark.parametrize("mutation", ["problem", "classes", "feature_order", "resolution"])
@@ -79,14 +153,16 @@ def test_handoff_contract_divergence_fails_closed(frame, handoff, mutation):
     elif mutation == "feature_order":
         bad["feature_contract"]["feature_columns"] = list(reversed(FEATURES))
     else:
-        bad["preparation_contract"]["decisions"] = [d for d in bad["preparation_contract"]["decisions"] if d.get("Decision ID") != "PREP-001"]
+        bad["preparation_contract"]["decisions"] = []
     with pytest.raises(DatasetValidationError):
         source_gate(frame, bad)
 
 
 def test_source_id_sha_column_target_and_roles_fail_closed(tmp_path, frame, handoff):
+    root = Path(handoff["_test_root"])
+    source = root / handoff["source"]["path"]
     with pytest.raises(DatasetValidationError):
-        validate_source_against_exploration_handoff(frame, handoff=handoff, source_file=RAW_ROOT/"dataset.csv", project_root=ROOT, dataset_slug=SLUG, source_repository="UCI Machine Learning Repository", source_dataset_id=999)
+        validate_source_against_exploration_handoff(frame, handoff=handoff, source_file=source, project_root=root, dataset_slug=SLUG, source_repository="UCI Machine Learning Repository", source_dataset_id=999)
     changed = frame.copy(); changed.iloc[0, 0] += 1
     path = tmp_path / "dataset.csv"; changed.to_csv(path, index=False)
     bad = copy.deepcopy(handoff); bad["source"]["path"] = path.relative_to(tmp_path).as_posix(); bad["source"]["sha256"] = fingerprint_file(path)
@@ -169,10 +245,10 @@ def test_target_diagnostics_are_non_gating(frame, policy):
 def test_repeated_profiles_are_preserved_and_reported(frame, policy):
     parts=split_continuous_regression_dataset(frame,policy=policy)
     evidence=analyze_repeated_profiles_across_partitions(frame,parts,feature_columns=FEATURES,target_column=TARGET)
-    assert evidence["source_exact_row_equality_group_count"]==11
-    assert evidence["source_exact_row_equality_row_count"]==36
-    assert evidence["source_repeated_feature_profile_group_count"]==19
-    assert evidence["target_conflicting_feature_profile_group_count"]==9
+    assert evidence["source_exact_row_equality_group_count"]==0
+    assert evidence["source_exact_row_equality_row_count"]==0
+    assert evidence["source_repeated_feature_profile_group_count"]==0
+    assert evidence["target_conflicting_feature_profile_group_count"]==0
     assert evidence["exact_row_multiplicity_preserved"] and evidence["feature_profile_multiplicity_preserved"]
     assert evidence["proven_duplicate_identity"] is False
 
@@ -187,4 +263,3 @@ def test_continuous_manifests_have_no_class_semantics(frame, policy):
     assert split["schema_version"]=="split-manifest.v3" and split["stratification"] is None
     assert "class_counts" not in split and "class_prevalence" not in split
     assert split["target_bins_created"] is False and split["seed_shopping_performed"] is False
-

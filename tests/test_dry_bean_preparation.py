@@ -564,6 +564,43 @@ def test_handoff_component_fingerprint_mismatch_fails(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda payload: payload["target_contract"].__setitem__("semantics", "ordinal"), "semantics"),
+        (lambda payload: payload["target_contract"].__setitem__("ordered_class_contract", list(reversed(CLASSES))), "ordered class"),
+        (lambda payload: payload.__setitem__("target_classes", list(reversed(CLASSES))), "ordered class"),
+        (lambda payload: payload.__setitem__("positive_target_class", CLASSES[0]), "positive class"),
+        (lambda payload: payload.__setitem__("dataset_slug", "other"), "dataset_slug"),
+    ],
+)
+def test_multiclass_handoff_contract_mutations_fail_closed(
+    tmp_path: Path, mutation, message: str
+) -> None:
+    frame = make_dry_bean_frame()
+    materialize_uci_source(tmp_path, frame)
+    csv_artifacts, json_artifacts, handoff_path, _ = build_runtime_bundle(tmp_path, frame)
+    write_preparation_artifacts(
+        project_root=tmp_path,
+        csv_artifacts=csv_artifacts,
+        json_artifacts=json_artifacts,
+    )
+    feature_path = tmp_path / "artifacts/preparation/dry-bean/feature-manifest.json"
+    feature = json.loads(feature_path.read_text(encoding="utf-8"))
+    mutation(feature)
+    feature_path.write_text(json.dumps(feature, sort_keys=True) + "\n", encoding="utf-8")
+    handoff_file = tmp_path / handoff_path
+    handoff = json.loads(handoff_file.read_text(encoding="utf-8"))
+    handoff["components"]["feature_manifest"]["sha256"] = fingerprint_file(feature_path)
+    handoff_file.write_text(json.dumps(handoff, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(HandoffValidationError, match=message):
+        load_and_validate_preparation_handoff(
+            project_root=tmp_path,
+            preparation_handoff_path=handoff_path,
+        )
+
+
 def test_identifier_free_runtime_artifacts_are_semantically_idempotent(tmp_path: Path) -> None:
     frame = make_dry_bean_frame()
     materialize_uci_source(tmp_path, frame)

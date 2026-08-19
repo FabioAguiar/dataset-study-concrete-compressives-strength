@@ -705,29 +705,19 @@ def validate_source_against_exploration_handoff(
             raise DatasetValidationError(
                 "Continuous-regression handoff must not declare class semantics."
             )
-        if prediction_contract.get("target_semantics") != "Continuous / quantitative":
+        target_semantics = prediction_contract.get("target_semantics")
+        if not isinstance(target_semantics, str) or not target_semantics.strip():
             raise DatasetValidationError("Continuous target semantics are inconsistent.")
-        if prediction_contract.get("target_unit") != "MPa":
+        target_unit = prediction_contract.get("target_unit")
+        if target_unit is not None and (
+            not isinstance(target_unit, str) or not target_unit.strip()
+        ):
             raise DatasetValidationError("Continuous target unit is inconsistent.")
         numeric_target = pd.to_numeric(frame[target_column], errors="coerce")
         if not pandas_types.is_numeric_dtype(frame[target_column]):
             raise DatasetValidationError("Continuous target must have a numeric dtype.")
         if numeric_target.isna().any() or not numeric_target.map(math.isfinite).all():
             raise DatasetValidationError("Continuous target must be complete and finite.")
-        decisions = handoff.get("preparation_contract", {}).get("decisions", [])
-        slag_resolution = [
-            item for item in decisions
-            if isinstance(item, Mapping)
-            and item.get("Decision ID") == "PREP-001"
-            and item.get("Status") == "Approved"
-            and item.get("Affected fields") == ["Blast Furnace Slag"]
-            and "Preserve released decimal values exactly" in str(item.get("Operation", ""))
-            and "do not round, truncate, or coerce" in str(item.get("Operation", ""))
-        ]
-        if len(slag_resolution) != 1:
-            raise DatasetValidationError(
-                "Required Blast Furnace Slag metadata resolution is absent or inconsistent."
-            )
     else:
         raise DatasetValidationError(
             f"Unexpected exploration problem type: {problem_type!r}."
@@ -802,13 +792,45 @@ def validate_source_against_exploration_handoff(
             )
         if problem_type == "continuous_regression":
             type_column = normalized_columns.get("type")
-            slag_rows = variables.loc[names.eq("Blast Furnace Slag")]
-            if type_column is None or len(slag_rows) != 1 or str(
-                slag_rows.iloc[0][type_column]
-            ).strip() != "Integer":
+            if type_column is None:
                 raise DatasetValidationError(
-                    "Blast Furnace Slag source-declared Integer provenance is missing."
+                    "UCI variables.csv must declare source variable types."
                 )
+            decisions = handoff.get("preparation_contract", {}).get("decisions", [])
+            for column in feature_columns:
+                source_rows = variables.loc[names.eq(column)]
+                if len(source_rows) != 1:
+                    raise DatasetValidationError(
+                        f"Source type provenance is missing for {column!r}."
+                    )
+                declared_type = str(source_rows.iloc[0][type_column]).strip().casefold()
+                series = frame[column]
+                requires_resolution = (
+                    declared_type == "integer"
+                    and pandas_types.is_numeric_dtype(series.dtype)
+                    and bool(((pd.to_numeric(series) % 1).abs() > 0).any())
+                )
+                if not requires_resolution:
+                    continue
+                matching = []
+                for item in decisions:
+                    if not isinstance(item, Mapping) or item.get("Status") != "Approved":
+                        continue
+                    affected = item.get("Affected fields", [])
+                    operation = str(item.get("Operation", "")).casefold()
+                    if (
+                        isinstance(affected, list)
+                        and column in affected
+                        and "preserve" in operation
+                        and "round" in operation
+                        and "truncate" in operation
+                        and ("coerce" in operation or "integer" in operation)
+                    ):
+                        matching.append(item)
+                if len(matching) != 1:
+                    raise DatasetValidationError(
+                        f"Required source-type resolution is absent or inconsistent for {column!r}."
+                    )
         checks.append(("uci_variable_roles_match", True))
 
     return SourceIdentityReport(
@@ -2695,6 +2717,16 @@ def load_and_validate_preparation_handoff(
                 raise HandoffValidationError(
                     "Multiclass feature manifest cannot define a positive class."
                 )
+            if target_contract.get("semantics") != "nominal_unordered":
+                raise HandoffValidationError(
+                    "Multiclass target semantics must remain nominal and unordered."
+                )
+            if target_contract.get("ordered_class_contract") != feature_manifest.get(
+                "target_classes"
+            ):
+                raise HandoffValidationError(
+                    "Multiclass ordered class contract is inconsistent."
+                )
     elif feature_manifest.get("schema_version") == "feature-manifest.v3":
         target_contract = feature_manifest.get("target_contract")
         if feature_manifest.get("problem_type") != "continuous_regression":
@@ -2705,8 +2737,13 @@ def load_and_validate_preparation_handoff(
             raise HandoffValidationError("Continuous feature manifest cannot define a positive class.")
         if "target_encoding_contract" in feature_manifest:
             raise HandoffValidationError("Continuous feature manifest cannot define target encoding.")
-        if not isinstance(target_contract, Mapping) or target_contract.get("semantics") != "Continuous / quantitative" or target_contract.get("unit") != "MPa":
+        if not isinstance(target_contract, Mapping):
             raise HandoffValidationError("Continuous target contract is invalid.")
+
+    if split_manifest.get("schema_version") == "split-manifest.v3" and split_manifest.get(
+        "problem_type"
+    ) != feature_manifest.get("problem_type"):
+        raise HandoffValidationError("Split manifest problem_type is inconsistent.")
 
     if handoff_manifest is not None and "upstream_exploration" in handoff_manifest:
         upstream = handoff_manifest["upstream_exploration"]
@@ -2720,16 +2757,38 @@ def load_and_validate_preparation_handoff(
             raise HandoffValidationError("Upstream exploration fingerprint mismatch.")
         if upstream.get("dataset_slug") != feature_manifest.get("dataset_slug"):
             raise HandoffValidationError("Upstream exploration dataset_slug mismatch.")
-            if target_contract.get("semantics") != "nominal_unordered":
-                raise HandoffValidationError(
-                    "Multiclass target semantics must remain nominal and unordered."
-                )
-            if target_contract.get("ordered_class_contract") != feature_manifest.get(
-                "target_classes"
-            ):
-                raise HandoffValidationError(
-                    "Multiclass ordered class contract is inconsistent."
-                )
+        upstream_payload = _load_json_artifact(root, upstream_path)
+        if upstream_payload.get("schema_version") != upstream.get("schema_version"):
+            raise HandoffValidationError("Upstream exploration schema_version mismatch.")
+        if upstream_payload.get("dataset_slug") != upstream.get("dataset_slug"):
+            raise HandoffValidationError("Upstream exploration payload dataset_slug mismatch.")
+        source_contract = upstream_payload.get("source")
+        prediction_contract = upstream_payload.get("prediction_contract")
+        feature_contract = upstream_payload.get("feature_contract")
+        if not all(
+            isinstance(value, Mapping)
+            for value in (source_contract, prediction_contract, feature_contract)
+        ):
+            raise HandoffValidationError("Upstream exploration contracts are invalid.")
+        if source_contract.get("dataset_id") != upstream.get("source_dataset_id"):
+            raise HandoffValidationError("Upstream source dataset ID mismatch.")
+        if source_contract.get("sha256") != upstream.get("source_dataset_sha256"):
+            raise HandoffValidationError("Upstream source dataset SHA-256 mismatch.")
+        if prediction_contract.get("problem_type") != feature_manifest.get("problem_type"):
+            raise HandoffValidationError("Upstream prediction problem_type mismatch.")
+        if prediction_contract.get("target_column") != feature_manifest.get("target_column"):
+            raise HandoffValidationError("Upstream target column mismatch.")
+        if prediction_contract.get("target_classes") != feature_manifest.get("target_classes"):
+            raise HandoffValidationError("Upstream target classes mismatch.")
+        if feature_contract.get("feature_columns") != feature_manifest.get("feature_columns"):
+            raise HandoffValidationError("Upstream feature order mismatch.")
+        if feature_contract.get("identifier_columns") != feature_manifest.get("identifier_columns"):
+            raise HandoffValidationError("Upstream identifier contract mismatch.")
+        if feature_manifest.get("problem_type") == "continuous_regression":
+            if target_contract.get("semantics") != prediction_contract.get("target_semantics"):
+                raise HandoffValidationError("Continuous target semantics mismatch.")
+            if target_contract.get("unit") != prediction_contract.get("target_unit"):
+                raise HandoffValidationError("Continuous target unit mismatch.")
 
     prepared_relative = preparation_manifest.get("prepared_path")
     partition_paths = split_manifest.get("partition_paths")
@@ -2828,10 +2887,46 @@ def load_and_validate_preparation_handoff(
             )
     quality_readiness = quality_evidence.get("readiness", {})
     preparation_readiness = preparation_manifest.get("readiness", {})
-    for readiness in (quality_readiness, preparation_readiness):
+    readiness_contracts = [
+        (quality_readiness, False),
+        (preparation_readiness, False),
+    ]
+    if handoff_manifest is not None:
+        readiness_contracts.append(
+            (
+                handoff_manifest.get("readiness", {}),
+                feature_manifest.get("problem_type") == "continuous_regression",
+            )
+        )
+        consumer_contract = handoff_manifest.get("consumer_contract", {})
+        if (
+            not isinstance(consumer_contract, Mapping)
+            or (
+                "test_partition_sealed" in consumer_contract
+                and consumer_contract.get("test_partition_sealed") is not True
+            )
+            or (
+                "test_partition_evaluated" in consumer_contract
+                and consumer_contract.get("test_partition_evaluated") is not False
+            )
+            or (
+                "model_selection_must_not_resplit" in consumer_contract
+                and consumer_contract.get("model_selection_must_not_resplit") is not True
+            )
+        ):
+            raise HandoffValidationError(
+                "Preparation consumer contract does not preserve the sealed test partition."
+            )
+    for readiness, require_sealing in readiness_contracts:
+        if not isinstance(readiness, Mapping):
+            raise HandoffValidationError("Preparation readiness contract is invalid.")
         if readiness.get("educational_model_selection_ready") is not True:
             raise HandoffValidationError(
                 "Preparation readiness does not enable educational model selection."
+            )
+        if require_sealing and readiness.get("test_partition_sealed") is not True:
+            raise HandoffValidationError(
+                "Preparation readiness must keep the test partition sealed."
             )
         if (
             "test_partition_evaluated" in readiness
@@ -2839,6 +2934,21 @@ def load_and_validate_preparation_handoff(
         ):
             raise HandoffValidationError(
                 "Preparation handoff must declare the test partition unevaluated."
+            )
+        if readiness.get("model_selected", False) is not False:
+            raise HandoffValidationError(
+                "Preparation handoff cannot declare a selected model."
+            )
+        if readiness.get("final_model_trained", False) is not False:
+            raise HandoffValidationError(
+                "Preparation handoff cannot declare a trained final model."
+            )
+        if (
+            "operational_modeling_ready" in readiness
+            and readiness.get("operational_modeling_ready") is not False
+        ):
+            raise HandoffValidationError(
+                "Preparation handoff cannot claim operational modeling readiness."
             )
 
     manifest_items: list[tuple[str, Mapping[str, Any]]] = [
