@@ -2902,6 +2902,33 @@ def load_and_validate_preparation_handoff(
     )
     if _model_selection_safe:
         target_column = feature_manifest.get("target_column")
+        row_counts = split_manifest.get("row_counts")
+        membership = split_manifest.get("membership")
+        if not isinstance(row_counts, Mapping) or not isinstance(membership, Mapping):
+            raise HandoffValidationError("Split membership contract is missing or invalid.")
+        membership_sets: dict[str, set[Any]] = {}
+        for name in ("train", "validation", "test"):
+            values = membership.get(name)
+            expected_count = row_counts.get(name)
+            if not isinstance(values, list) or len(values) != expected_count:
+                raise HandoffValidationError(
+                    f"Partition '{name}' membership length is inconsistent."
+                )
+            membership_sets[name] = set(values)
+            if len(membership_sets[name]) != len(values):
+                raise HandoffValidationError(
+                    f"Partition '{name}' membership contains duplicate tokens."
+                )
+        if any(
+            membership_sets[left].intersection(membership_sets[right])
+            for left, right in (("train", "validation"), ("train", "test"),
+                                ("validation", "test"))
+        ):
+            raise HandoffValidationError("Split membership partitions are not disjoint.")
+        if sum(int(row_counts[name]) for name in ("train", "validation", "test")) != preparation_manifest.get(
+            "prepared_row_count"
+        ):
+            raise HandoffValidationError("Split membership does not cover the prepared row count.")
         for name in ("train", "validation"):
             frame = loaded_partitions[name]
             if list(frame.columns) != authoritative_columns:

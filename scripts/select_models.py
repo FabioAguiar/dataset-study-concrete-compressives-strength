@@ -101,6 +101,8 @@ _VOLATILE_KEYS: frozenset[str] = frozenset(
         "timestamp",
         "duration_seconds",
         "search_duration_seconds",
+        "runtime_versions",
+        "self_semantic_sha256",
         "mean_fit_time",
         "std_fit_time",
         "mean_score_time",
@@ -3595,6 +3597,10 @@ def write_regression_model_selection_artifacts(*, output_directory: str | Path,
         (stage / REGRESSION_ARTIFACT_FILENAMES[0]).write_bytes(_render_artifact(REGRESSION_ARTIFACT_FILENAMES[0], manifest))
         output.mkdir(parents=True, exist_ok=True)
         present = {name: (output/name).exists() for name in REGRESSION_ARTIFACT_FILENAMES}
+        if any(present.values()) and not all(present.values()):
+            raise ArtifactConflictError(
+                "Partial regression model-selection artifact set detected; refusing repair."
+            )
         divergent = [name for name in REGRESSION_ARTIFACT_FILENAMES if present[name] and
                      not _semantic_equivalent(name, _load_artifact(output/name), _load_artifact(stage/name))]
         if divergent and not overwrite:
@@ -3638,7 +3644,17 @@ def _load_and_validate_regression_model_selection_handoff(*, project_root: str |
     if manifest.get("schema_version") != "model-selection-manifest.v3" or manifest.get("dataset_slug") != payload.get("dataset_slug"):
         raise ModelSelectionHandoffError("Regression manifest contract mismatch.")
     base = _deepcopy(manifest); expected_self = base.pop("self_semantic_sha256", None)
-    if semantic_fingerprint_json(base) != expected_self: raise ModelSelectionHandoffError("Manifest semantic fingerprint mismatch.")
+    observed_self = semantic_fingerprint_json(base)
+    if observed_self != expected_self:
+        # Compatibility with v3 manifests written before runtime versions were
+        # explicitly classified as non-scientific execution metadata.
+        runtime_versions = base.get("runtime_versions")
+        legacy_base = _strip_volatile(base)
+        if runtime_versions is not None:
+            legacy_base["runtime_versions"] = _jsonable(runtime_versions)
+        legacy_self = sha256_bytes(canonical_json_bytes(legacy_base))
+        if legacy_self != expected_self:
+            raise ModelSelectionHandoffError("Manifest semantic fingerprint mismatch.")
     for name in REGRESSION_ARTIFACT_FILENAMES[1:]:
         expected = manifest.get("artifact_fingerprints", {}).get(name, {})
         if not (directory/name).is_file() or sha256_file(directory/name) != expected.get("byte_sha256"):
@@ -3647,8 +3663,22 @@ def _load_and_validate_regression_model_selection_handoff(*, project_root: str |
             raise ModelSelectionHandoffError(f"Artifact semantic fingerprint mismatch: {name}")
     candidates = json.loads((directory/"candidate-results.json").read_text())
     validation = json.loads((directory/"validation-evidence.json").read_text())
-    if candidates.get("selection", {}).get("selected_model_id") != payload.get("selected_model_id"):
+    selection = candidates.get("selection", {})
+    if selection.get("selected_model_id") != payload.get("selected_model_id"):
         raise ModelSelectionHandoffError("Selected candidate mismatch.")
+    if selection.get("selected_model_family") != payload.get("selected_model_family"):
+        raise ModelSelectionHandoffError("Selected candidate family mismatch.")
+    selected_searches = [
+        item for item in candidates.get("family_searches", [])
+        if item.get("model_id") == payload.get("selected_model_id")
+    ]
+    if len(selected_searches) != 1:
+        raise ModelSelectionHandoffError("Selected candidate search evidence is invalid.")
+    selected_search = selected_searches[0]
+    if selected_search.get("family") != payload.get("selected_model_family"):
+        raise ModelSelectionHandoffError("Selected search family mismatch.")
+    if selected_search.get("selected_hyperparameters") != payload.get("selected_hyperparameters"):
+        raise ModelSelectionHandoffError("Selected hyperparameters mismatch.")
     if payload.get("selected_model_id") not in validation.get("models", {}):
         raise ModelSelectionHandoffError("Selected validation evidence is missing.")
     prep_ref = payload.get("preparation_handoff_reference", {}); prep_path = prep_ref.get("path")
@@ -3662,8 +3692,30 @@ def _load_and_validate_regression_model_selection_handoff(*, project_root: str |
     target = payload.get("target_contract", {})
     if feature.get("problem_type") != "continuous_regression" or target.get("column") != feature.get("target_column") or target.get("semantics") != feature.get("target_contract", {}).get("semantics") or target.get("unit") != feature.get("target_contract", {}).get("unit"):
         raise ModelSelectionHandoffError("Target contract differs from preparation.")
+    if manifest.get("target_contract") != target or validation.get("target_contract") != target:
+        raise ModelSelectionHandoffError("Target contract differs across selection artifacts.")
     if payload.get("available_feature_columns") != feature.get("feature_columns") or payload.get("selected_feature_columns") != feature.get("feature_columns"):
         raise ModelSelectionHandoffError("Feature order differs from preparation.")
+    feature_contract = manifest.get("feature_contract", {})
+    if (feature_contract.get("available_features") != payload.get("available_feature_columns")
+            or feature_contract.get("selected_features") != payload.get("selected_feature_columns")
+            or feature_contract.get("selected_feature_policy") != payload.get("selected_feature_policy")):
+        raise ModelSelectionHandoffError("Feature contract differs across selection artifacts.")
+    metric_contract = manifest.get("model_selection_contract", {})
+    candidate_metric = candidates.get("primary_metric_contract", {})
+    validation_metric = validation.get("primary_metric", {})
+    if (metric_contract.get("primary_metric") != payload.get("primary_metric")
+            or metric_contract.get("primary_metric_direction") != payload.get("primary_metric_direction")
+            or metric_contract.get("primary_metric_unit") != target.get("unit")
+            or candidate_metric.get("name") != payload.get("primary_metric")
+            or candidate_metric.get("direction") != payload.get("primary_metric_direction")
+            or candidate_metric.get("unit") != target.get("unit")
+            or validation_metric.get("name") != payload.get("primary_metric")
+            or validation_metric.get("direction") != payload.get("primary_metric_direction")
+            or validation_metric.get("unit") != target.get("unit")):
+        raise ModelSelectionHandoffError("Metric contract differs across selection artifacts.")
+    if manifest.get("cv_contract") != payload.get("cv_contract"):
+        raise ModelSelectionHandoffError("CV contract differs across selection artifacts.")
     hashes = payload.get("preparation_artifact_hashes", {})
     for part in ("train", "validation"):
         if hashes.get(f"{part}_sha256") != split["partition_sha256"][part]: raise ModelSelectionHandoffError(f"{part} hash mismatch.")
