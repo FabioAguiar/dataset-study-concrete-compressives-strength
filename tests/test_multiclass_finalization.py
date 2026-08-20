@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import inspect
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -752,14 +753,13 @@ def test_handoff_builder_preserves_shape_factor2_and_no_post_test_change(
     assert handoff["no_model_selection_decision_changed_after_test"] is True
 
 
-def test_notebook_04_is_clean_and_multiclass_only():
-    root = Path(__file__).resolve().parents[1]
-    # The official Notebook 04 now implements continuous regression.  Keep the
-    # legacy multiclass source guard attached to its pedagogical reference.
-    path = root / "notebooks/04_final_model_and_bundle_reference.ipynb"
-    notebook = json.loads(path.read_text())
-    code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
-    text = "\n".join("".join(cell.get("source", [])) for cell in code_cells).lower()
+def test_multiclass_finalization_source_uses_argmax_without_binary_thresholds():
+    text = "\n".join(
+        (
+            inspect.getsource(evaluate_multiclass_final_model_once),
+            inspect.getsource(validate_multiclass_finalization_contract),
+        )
+    ).lower()
     assert "evaluate_multiclass_final_model_once" in text
     assert "argmax_class_score_or_probability" in text
     assert "precision_recall_curve" not in text

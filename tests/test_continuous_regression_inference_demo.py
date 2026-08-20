@@ -59,7 +59,7 @@ def continuous_fixture(tmp_path):
         "model_contract": {"family": "HistGradientBoostingRegressor", "selected_hyperparameters": {"model__max_iter": 5}, "fixed_constructor_parameters": params},
         "model_state_descriptor": descriptor, "model_state_fingerprint": "synthetic-state",
         "model_artifact_path": "models/model.joblib", "model_artifact_sha256": digest,
-        "runtime_compatibility": {"python": "3.12.13", "scikit_learn": "1.9.0"},
+        "runtime_compatibility": smoke.current_runtime_versions(),
         "readiness": {"inference_demo_ready": True, "operational_modeling_ready": False, "operational_validity": "unconfirmed"},
     }
     handoff = {
@@ -191,12 +191,13 @@ def test_helpers_and_notebook_preserve_consumer_boundary():
     assert not any(token in code for token in forbidden)
 
 
-def test_real_final_artifacts_are_not_modified():
-    root = Path(__file__).resolve().parents[1]
-    directory = root / "artifacts/models/concrete-compressive-strength"
+def test_synthetic_final_artifacts_are_not_modified(continuous_fixture):
+    root, pipeline, bundle, handoff, manifest, valid = continuous_fixture
+    directory = root / "models"
     before = {path.name: (smoke._sha256_file(path), path.stat().st_size) for path in directory.iterdir() if path.is_file()}
-    handoff = json.loads((directory / "final-model-handoff.json").read_text())
-    bundle = json.loads((directory / "inference-bundle.json").read_text())
     smoke.validate_continuous_inference_readiness(handoff, bundle)
+    smoke.validate_continuous_bundle_handoff_alignment(handoff, bundle, manifest=manifest)
+    smoke.validate_model_artifact_before_load(project_root=root, bundle=bundle, handoff=handoff, manifest=manifest)
+    smoke.predict_continuous_batch(pipeline, valid, bundle=bundle)
     after = {path.name: (smoke._sha256_file(path), path.stat().st_size) for path in directory.iterdir() if path.is_file()}
     assert before == after

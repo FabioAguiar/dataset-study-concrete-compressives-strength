@@ -1,329 +1,257 @@
-# Dry Bean Dataset Study
+# Concrete Compressive Strength — Reproducible Continuous Regression Study
 
-End-to-end reproducible educational study of the UCI Dry Bean dataset, covering source validation, exploratory evidence, deterministic preparation, multiclass model selection, sealed final holdout evaluation, model bundling, and trusted independent inference.
+## Overview
 
-## At a glance
+This repository is an educational, reproducible continuous-regression study of
+the **Concrete Compressive Strength** dataset from the UCI Machine Learning
+Repository (dataset `165`, DOI `10.24432/C5PK67`). The source has 1,030 rows and
+9 columns: eight numerical predictors and the continuous target **Concrete
+compressive strength**, measured in MPa.
 
-| Item | Result |
-|---|---:|
-| Source | UCI Machine Learning Repository, dataset `602` |
-| Source rows | 13,611 |
-| Source columns | 17 |
-| Features | 16 numerical morphology features |
-| Target | `Class` |
-| Classes | 7 nominal, unordered bean varieties |
-| Selected model | HistGradientBoostingClassifier |
-| Selected feature policy | `all_features` |
-| Primary metric | macro F1 |
-| Final test macro F1 | 0.941835 |
-| Final test balanced accuracy | 0.939897 |
-| Educational study complete | Yes |
-| Operational modeling ready | No |
-
-## Study Objective
-
-This repository documents a frozen educational multiclass classification workflow for dry bean grain varieties. The notebooks keep the scientific decisions visible, while Python modules and tests enforce reusable contracts for data preparation, model selection, finalization, and independent inference.
-
-The study does not claim production readiness, operational validity, temporal validity, or an implemented deployment/API surface.
-
-## Dataset And Source
-
-The dataset is the UCI Machine Learning Repository **Dry Bean** dataset:
-
-| Field | Value |
+| Item | Value |
 |---|---|
-| UCI dataset ID | `602` |
-| Repository URL | <https://archive.ics.uci.edu/dataset/602/dry+bean+dataset> |
-| Dataset DOI | `10.24432/C50S4B` |
-| Intro paper | "Multiclass classification of dry beans using computer vision and machine learning techniques" |
-| Paper DOI | `10.1016/j.compag.2020.105507` |
+| Problem type | `continuous_regression` |
+| Rows / columns | 1,030 / 9 |
+| Predictors | 8 numerical features |
+| Target | Concrete compressive strength |
+| Target unit | MPa |
+| Selected model | HistGradientBoostingRegressor |
+| Feature policy | `all_features` |
+| Operational modeling ready | No |
+| Operational validity | Unconfirmed |
 
-The source contains 16 numerical image-derived features and one nominal target column, `Class`. No source identifier is available, so exact-row equality is not treated as duplicate identity.
-
-Classes, in the official output order used by this study:
-
-```text
-SEKER
-BARBUNYA
-BOMBAY
-CALI
-DERMASON
-HOROZ
-SIRA
-```
-
-## Workflow
+## Scientific workflow
 
 ```text
 Raw UCI snapshot
-    -> 01 data understanding and exploration
-    -> 02 deterministic preparation and stratified split
-    -> 03 model selection on train/validation only
-    -> 04 final train+validation fit and sealed test evaluation
-    -> 05 independent inference demonstration
+        ↓
+01 — Data Understanding and Exploration
+        ↓
+02 — Data Preparation
+        ↓
+03 — Model Selection and Evaluation
+        ↓
+04 — Final Model + One-Time Test + Bundle
+        ↓
+05 — Independent Inference Demo
 ```
 
-Each notebook depends on persisted artifacts, not live variables from a previous notebook.
+Each notebook starts from persisted artifacts rather than live variables from
+the preceding notebook. The test partition remains sealed through model
+selection and is accessed only by Notebook 04 after the winner and finalization
+contract are frozen. Notebook 05 is an independent, read-only consumer of final
+artifacts.
 
-## Data Quality And Preparation
+## Dataset
 
-The prepared dataset preserves the source shape exactly:
+Predictors, in contract order:
 
-| Check | Result |
+1. Cement
+2. Blast Furnace Slag
+3. Fly Ash
+4. Water
+5. Superplasticizer
+6. Coarse Aggregate
+7. Fine Aggregate
+8. Age
+
+The target is **Concrete compressive strength**, a quantitative continuous
+measurement on its original MPa scale.
+
+## Important data-quality findings
+
+The current exploration and preparation evidence confirms:
+
+- all 1,030 rows have a present, finite target;
+- UCI metadata declares Blast Furnace Slag as Integer, while the materialized
+  source is `float64`; 298 rows (28.932%) have non-integer values, which are
+  preserved exactly;
+- 11 exact-row-equality groups contain 36 rows;
+- 19 repeated feature-profile groups contain 57 rows: 10 groups/33 rows share
+  a target, while 9 groups/24 rows have target disagreement;
+- no source observation identifier exists, so equality is not evidence of
+  duplicate identity and no rows were removed;
+- all eight predictors were retained, with no generic outlier removal,
+  clipping, winsorization, target binning, or target transformation; and
+- values outside 1.5-IQR fences are descriptive diagnostics, not deletion
+  rules.
+
+## Exploratory figures
+
+![Target distribution](docs/images/target_distribution.png)
+
+![Numerical feature correlation heatmap](docs/images/numerical_feature_correlation_heatmap.png)
+
+![Feature-to-target association ranking](docs/images/feature_target_association_ranking.png)
+
+![Regression nonlinearity signals](docs/images/regression_nonlinearity_signals.png)
+
+![Regression interaction signals](docs/images/regression_interaction_signals.png)
+
+## Preparation and split
+
+Notebook 02 produces a static educational snapshot using a shuffled,
+non-stratified regression split. Target bins are not used, and no learned
+preprocessing is fit during preparation.
+
+| Partition | Rows | Fraction |
+|---|---:|---:|
+| Train | 721 | 70% |
+| Validation | 154 | 15% |
+| Test | 155 | 15% |
+
+The split ID is `shuffled-70-15-15-seed-42`; the primary seed is 42 and the
+second-stage seed is 43. Technical row membership is integrity evidence, not a
+claim of semantic observation identity. The test artifact stays sealed
+downstream until Notebook 04.
+
+## Model selection
+
+Notebook 03 compares `DummyRegressor(strategy="median")`, Ridge,
+DecisionTreeRegressor, RandomForestRegressor, and
+HistGradientBoostingRegressor. Cross-validation uses train only with
+`KFold(n_splits=5, shuffle=True, random_state=42)`. The primary metric is MAE
+(lower is better); RMSE, R², and MedAE are secondary. The predeclared practical
+tie tolerance is 0.10 MPa.
+
+| Model | MAE | RMSE | R² | MedAE |
+|---|---:|---:|---:|---:|
+| Dummy median | 12.8145 | 15.8699 | -0.0005 | 11.2600 |
+| Ridge | 8.5944 | 10.7533 | 0.5406 | 7.1671 |
+| Decision Tree | 4.2860 | 6.5247 | 0.8309 | 2.9000 |
+| Random Forest | 3.7689 | 5.4146 | 0.8835 | 2.5385 |
+| HistGradientBoosting | 2.7417 | 4.0870 | 0.9336 | 1.8033 |
+
+The frozen winner is `hist_gradient_boosting`, family
+`HistGradientBoostingRegressor`, with `all_features`. Selected parameters are
+`model__l2_regularization=1.0`, `model__learning_rate=0.1`,
+`model__max_leaf_nodes=15`, and `model__min_samples_leaf=10`. The fixed
+constructor contract includes `max_iter=300` and `random_state=42`.
+
+## Final model and one-time test
+
+Notebook 04 follows the fixed sequence: frozen winner → final fit → verified
+model freeze → first test access → one test prediction → aggregate evidence.
+The final fit uses train plus validation (721 + 154 = 875 rows); the test has
+155 rows.
+
+| Metric | Frozen Validation | Final Test | Test − Validation |
+|---|---:|---:|---:|
+| MAE (MPa) | 2.7417 | 2.5822 | -0.1595 |
+| RMSE (MPa) | 4.0870 | 4.2104 | +0.1234 |
+| R² | 0.9336 | 0.9387 | +0.0050 |
+| MedAE (MPa) | 1.8033 | 1.6363 | -0.1669 |
+
+Final-test diagnostics are: residual mean 0.7577 MPa, residual standard
+deviation 4.1551 MPa, maximum absolute error 26.6252 MPa, and absolute-error
+p50/p90/p95 of 1.6363/6.4306/7.7465 MPa. These are descriptive evidence, not
+new thresholds.
+
+## Final artifacts
+
+Notebook 04 materializes five local runtime outputs:
+
+- `final-pipeline.joblib` — fitted pipeline;
+- `final-model-manifest.json` — frozen fit, runtime, and model contract;
+- `final-test-evidence.json` — one-time aggregate test evidence;
+- `inference-bundle.json` — input, output, runtime, and trust contract; and
+- `final-model-handoff.json` — final readiness and lineage handoff.
+
+The JSON contracts use v3 schemas where applicable. Runtime artifacts are
+ignored by Git. The handoff and bundle authenticate lineage, and the model SHA
+must be validated before joblib deserialization. The current model SHA-256 is
+`6e6a5a970c6e91b4ae075c48e4cd4a3c21f0b45a9223e3945906fd8c8b2a5032`.
+
+## Independent inference
+
+Notebook 05 consumes final artifacts only: it does not access train,
+validation, or test data; fit or select a model; or alter artifacts. It enforces
+strict feature order, finite numeric input, declared dtypes, and a continuous
+numeric output on the original MPa scale after trusted model loading.
+
+The four current inputs are manually written illustrations, not dataset rows;
+they have no ground truth and are neither a benchmark nor an accuracy measure.
+
+| Example | Prediction (MPa) |
 |---|---:|
-| Source rows | 13,611 |
-| Prepared rows | 13,611 |
-| Source columns | 17 |
-| Prepared columns | 17 |
-| Row removal | None |
-| Deterministic materialization rules | None |
-| Candidate features retained | 16 of 16 |
-| Learned preprocessing in Notebook 02 | None |
+| `illustrative_mix_early_age` | 29.994813 |
+| `illustrative_mix_standard` | 46.098200 |
+| `illustrative_mix_slag_fly_ash` | 53.969705 |
+| `illustrative_mix_high_cement` | 67.761977 |
 
-The source SHA and logical source fingerprint are preserved. The static split is stratified:
-
-| Partition | Rows |
-|---|---:|
-| Train | 9,527 |
-| Validation | 2,042 |
-| Test | 2,042 |
-
-The test partition remained sealed until the final evaluation in Notebook 04.
-
-Repeated feature profiles were preserved because there is no source identifier. Repeated-profile evidence does not prove duplicate identity or leakage.
-
-## Exploratory Evidence
-
-The target has moderate class-support imbalance. `DERMASON` is the majority class and `BOMBAY` is the minority class; the majority/minority ratio is about 6.7931 and normalized class entropy is about 0.942737.
-
-![Dry Bean target class distribution](docs/images/target_class_distribution.png)
-
-Several morphology measurements show strong univariate association with `Class`, and the feature set includes structural redundancy plus confirmed mathematical dependencies. These findings are descriptive and do not by themselves justify feature removal.
-
-![Univariate feature-to-target associations](docs/images/feature_target_association_ranking.png)
-
-The PCA projection is exploratory visualization only. It shows class overlap and should not be read as a classifier or a causal explanation.
-
-![Exploratory PCA class projection](docs/images/class_pca_projection.png)
-
-Additional curated evidence is available in `docs/images/numerical_feature_correlation_heatmap.png` and `docs/images/standardized_class_profiles.png`.
-
-## Model Selection
-
-Notebook 03 compares four candidate families under the frozen multiclass contract:
-
-- LogisticRegression
-- DecisionTreeClassifier
-- RandomForestClassifier
-- HistGradientBoostingClassifier
-
-The selected model is:
-
-| Field | Value |
-|---|---|
-| `selected_model_id` | `hist_gradient_boosting__all_features` |
-| Feature policy | `all_features` |
-| Feature count | 16 |
-| Numerical scaling | none |
-| Categorical processing | not applicable |
-| Imbalance strategy | none |
-| `class_weight` | `None` |
-| Resampling | none |
-
-Selected hyperparameters:
+## Project structure
 
 ```text
-class_weight       = None
-l2_regularization = 0.0
-learning_rate     = 0.05
-max_iter          = 250
-max_leaf_nodes    = 15
-min_samples_leaf  = 40
-random_state      = 42
+notebooks/       official Concrete notebooks 01–05
+scripts/         reusable validation, preparation, selection, and inference code
+tests/           scientific contracts, compatibility, corruption, and hygiene tests
+docs/images/     curated study figures
+data/            local raw/processed runtime data plus data documentation
+artifacts/       local handoffs, evidence, manifests, and model outputs
 ```
 
-Validation evidence for the selected model:
+Binary and multiclass backward compatibility is protected by the shared Python
+contracts and their dedicated tests; it does not depend on legacy notebooks.
 
-| Metric | Validation |
-|---|---:|
-| macro F1 | 0.937881 |
-| balanced accuracy | 0.939131 |
-| log loss | 0.225172 |
-| worst per-class recall | 0.870886 |
+## Reproducibility
 
-![Validation model comparison](docs/images/model_validation_comparison.png)
-
-`ShapeFactor2` remains in the final feature set. Its audited formula was not numerically confirmed at the configured tolerance, so `provenance_status = unresolved`; that does not mean the feature is invalid. Predictive usefulness and source provenance are separate questions. Removing `ShapeFactor2` changed validation macro F1 by about -0.001204 relative to all features.
-
-The confirmed-derived-feature ablation also supported retaining all 16 features: validation macro F1 was about 0.937881 with all features and about 0.919956 without the nine confirmed derived features, a delta of about -0.017925.
-
-![Feature policy sensitivity](docs/images/feature_policy_sensitivity.png)
-
-## Final Holdout Evaluation
-
-Notebook 04 trained the frozen selected model once on train plus validation and evaluated the sealed test partition once.
-
-| Metric | Final test |
-|---|---:|
-| macro F1 | 0.9418353636 |
-| balanced accuracy | 0.9398971908 |
-| macro recall | 0.9398971908 |
-| weighted F1 | 0.9321874639 |
-| accuracy | 0.9324191969 |
-| log loss | 0.1810239003 |
-| minimum per-class recall | 0.8686868687 |
-| worst class | SIRA |
-
-![Final test confusion matrix](docs/images/final_test_confusion_matrix.png)
-
-The largest mutual confusion pairs were stable from validation to test:
-
-| Pair | Final test mutual errors |
-|---|---:|
-| DERMASON <-> SIRA | 58 |
-| BARBUNYA <-> CALI | 19 |
-
-This is descriptive stability of the confusion pattern, not a causal claim. Test minus validation macro F1 was about +0.003954, and balanced accuracy delta was about +0.000766. This comparison is not a new selection gate.
-
-![Validation vs test per-class recall](docs/images/validation_vs_test_per_class_recall.png)
-
-Additional final comparison evidence is available in `docs/images/validation_vs_test_metrics.png`.
-
-## Independent Multiclass Inference
-
-Notebook 05 demonstrates trusted independent inference from:
-
-```text
-final-model-handoff.v2
-inference-bundle.v2
-final-pipeline.joblib
-```
-
-The inference input contract requires the same 16 numerical features. `Class` is prohibited as input, and missing required values are rejected.
-
-The output contract contains:
-
-- `predicted_class`
-- `class_order`
-- `class_probabilities`
-
-The decision rule is `argmax_class_score_or_probability`. The estimator class order is:
-
-```text
-BARBUNYA
-BOMBAY
-CALI
-DERMASON
-HOROZ
-SEKER
-SIRA
-```
-
-The official output class order is:
-
-```text
-SEKER
-BARBUNYA
-BOMBAY
-CALI
-DERMASON
-HOROZ
-SIRA
-```
-
-Probabilities are explicitly realigned from estimator order to the official output order. There is no positive-class probability, binary threshold, or operational decision threshold in the multiclass inference contract.
-
-## Project Structure
-
-```text
-artifacts/          Artifact documentation and ignored runtime outputs
-data/               Data documentation and ignored raw/processed datasets
-docs/images/        Curated versionable figures for documentation
-notebooks/          Five authoritative source notebooks
-scripts/            Reusable validation, analysis, selection, finalization, and inference code
-tests/              Unit and contract tests
-```
-
-No deployment/API implementation is part of this study.
-
-## Environment Setup
-
-Install the project with notebook and test dependencies:
+The source project supports Python >= 3.10.
 
 ```bash
+python -m pip install -e .
+python -m pip install -e ".[test]"
 python -m pip install -e ".[notebook,test]"
+
+python -m scripts.download_data \
+  uci 165 \
+  --destination data/raw/concrete-compressive-strength
+
+jupyter lab
 ```
 
-Register an optional Jupyter kernel:
+The serialized model's bundle validates runtime compatibility. A model artifact
+created under a particular runtime can therefore impose stricter trusted
+deserialization requirements than the source project's `requires-python`.
 
-```bash
-python -m ipykernel install --user \
-  --name dataset-study-dry-bean \
-  --display-name "Python (dataset-study-dry-bean)"
-```
+## Running the notebooks
 
-The final bundle records this exact runtime:
+Run the official notebooks in order: 01, 02, 03, 04, then 05.
 
-| Component | Version |
-|---|---:|
-| Python | 3.13.13 |
-| pandas | 3.0.5 |
-| scikit-learn | 1.9.0 |
-| joblib | 1.5.3 |
+- 01 persists exploration evidence and the exploration handoff.
+- 02 persists prepared data, split artifacts, quality/feature/split manifests,
+  and the preparation handoff.
+- 03 persists candidate/CV/validation evidence and freezes the selection
+  handoff.
+- 04 materializes the final pipeline, manifest, one-time test evidence, bundle,
+  and final handoff. Its idempotent path preserves the one-time evidence; it is
+  not a mechanism for repeated test re-evaluation.
+- 05 validates and consumes final artifacts read-only for independent inference.
 
-## Reproducing The Study
-
-Acquire the UCI dataset:
-
-```bash
-python -m scripts.download_data uci \
-  602 \
-  --destination data/raw/dry-bean
-```
-
-Run notebooks in order from 01 to 05. Keep the source notebooks clean by executing copies instead of using `--inplace`:
-
-```bash
-jupyter nbconvert --to notebook --execute notebooks/01_data_understanding_and_exploration.ipynb
-jupyter nbconvert --to notebook --execute notebooks/02_data_preparation.ipynb
-jupyter nbconvert --to notebook --execute notebooks/03_model_selection_and_evaluation.ipynb
-jupyter nbconvert --to notebook --execute notebooks/04_final_model_and_bundle.ipynb
-jupyter nbconvert --to notebook --execute notebooks/05_inference_demo.ipynb
-```
-
-The generated `*.nbconvert.ipynb` files are ignored by Git.
+Runtime data and artifacts are not versioned and must be materialized locally.
 
 ## Tests
 
-Run:
+The suite covers source/data validation, continuous preparation, binary and
+multiclass backward compatibility, continuous model selection, finalization,
+inference, artifact corruption and fail-closed behavior, figure export, and
+notebook cleanliness.
 
 ```bash
-PYTHONPATH=. python -m pytest -q
+python -m pytest -q
 ```
 
-The tests include backward compatibility for v1 binary contracts while keeping the Dry Bean workflow on the v2 multiclass contract.
+## Scope and limitations
 
-## Reproducibility And Integrity
+This is an educational and reproducible study, not a production-readiness
+claim. The final handoff records `operational_modeling_ready=false` and
+`operational_validity=unconfirmed`. The test partition was used only for the
+one-time final evaluation and never for retuning. Independent inference examples
+have no ground truth. No API, deployment surface, or operational validity is
+claimed.
 
-The repository intentionally keeps raw data, processed data, model binaries, and runtime artifacts out of the normal versioned workflow. Tests should not pass only because local runtime artifacts happen to exist.
+## Results summary
 
-Versioned notebooks are kept without code-cell outputs or execution counts. Curated documentation figures live in `docs/images/`; future legitimate notebook executions export those figures through `scripts/export_figures.py`.
-
-## Limitations
-
-This is an educational static-snapshot benchmark. Operational validity is unconfirmed, feature availability at real inference time is unconfirmed, and no API or deployment layer is implemented.
-
-Repeated-profile final-test sensitivity was descriptive only: 15 final-test rows had a feature profile also present in train plus validation, leaving 2,027 sensitivity rows. Official macro F1 was about 0.941835 and sensitivity macro F1 was about 0.941523, a delta of about -0.000312. This is not a leakage claim.
-
-## Current Readiness
-
-| Readiness field | Status |
-|---|---|
-| Educational study complete | true |
-| Operational modeling ready | false |
-| Operational validity | unconfirmed |
-| API/deployment implementation | not part of this study |
-
-## Source And Citation
-
-Use the UCI dataset and paper metadata above when citing the data source. The intro paper is "Multiclass classification of dry beans using computer vision and machine learning techniques", DOI `10.1016/j.compag.2020.105507`; the dataset DOI is `10.24432/C50S4B`.
+All eight features were retained and HistGradientBoostingRegressor was selected.
+Its strong validation evidence was broadly consistent with the one-time final
+test. Trusted independent continuous inference was demonstrated, while
+production and operational validity remain outside the study scope.
