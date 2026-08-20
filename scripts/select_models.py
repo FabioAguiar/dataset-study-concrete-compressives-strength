@@ -3374,11 +3374,13 @@ def validate_regression_model_selection_contract(contract: Mapping[str, Any]) ->
         raise ModelSelectionContractError(f"Missing regression contract fields: {missing}")
     checks = (("problem_type", "continuous_regression"),
               ("target_semantics", "Continuous / quantitative"),
-              ("target_unit", "MPa"), ("primary_metric", "mae"),
+              ("primary_metric", "mae"),
               ("primary_metric_direction", "lower_is_better"), ("refit_metric", "mae"))
     for field, expected in checks:
         if result.get(field) != expected:
             raise ModelSelectionContractError(f"{field} must be {expected!r}.")
+    if not isinstance(result.get("target_unit"), str) or not result["target_unit"].strip():
+        raise ModelSelectionContractError("target_unit must be a non-empty string.")
     cv = result["cv"]
     if not isinstance(cv, Mapping) or cv.get("strategy") != "KFold":
         raise ModelSelectionContractError("Regression cv.strategy must be KFold.")
@@ -3595,17 +3597,9 @@ def write_regression_model_selection_artifacts(*, output_directory: str | Path,
         present = {name: (output/name).exists() for name in REGRESSION_ARTIFACT_FILENAMES}
         divergent = [name for name in REGRESSION_ARTIFACT_FILENAMES if present[name] and
                      not _semantic_equivalent(name, _load_artifact(output/name), _load_artifact(stage/name))]
-        manifest_only_metadata_difference = (
-            divergent == ["model-selection-manifest.json"]
-            and all(present.values())
-        )
-        # The manifest is an index over the five scientific components.  When
-        # every component is semantically equivalent, retain the existing
-        # internally consistent set even if runtime/index metadata changed.
-        # Any component-level divergence still fails closed below.
-        if divergent and not overwrite and not manifest_only_metadata_difference:
+        if divergent and not overwrite:
             raise ArtifactConflictError("Existing regression artifacts are semantically divergent: " + ", ".join(divergent))
-        if all(present.values()) and (not divergent or manifest_only_metadata_difference):
+        if all(present.values()) and not divergent:
             return ArtifactWriteResult(output, (), (), True,
                 {n: sha256_file(output/n) for n in REGRESSION_ARTIFACT_FILENAMES},
                 {n: _semantic_fingerprint_value(n, _load_artifact(output/n)) for n in REGRESSION_ARTIFACT_FILENAMES})
@@ -3660,8 +3654,10 @@ def _load_and_validate_regression_model_selection_handoff(*, project_root: str |
     prep_ref = payload.get("preparation_handoff_reference", {}); prep_path = prep_ref.get("path")
     if not isinstance(prep_path, str) or sha256_file(root/_require_relative_path(prep_path, field="preparation_handoff_reference.path")) != prep_ref.get("sha256"):
         raise ModelSelectionHandoffError("Preparation handoff fingerprint mismatch.")
-    from scripts.prepare_data import load_and_validate_preparation_handoff
-    prep = load_and_validate_preparation_handoff(project_root=root, preparation_handoff_path=prep_path)
+    from scripts.prepare_data import load_and_validate_preparation_for_model_selection
+    prep = load_and_validate_preparation_for_model_selection(
+        project_root=root, preparation_handoff_path=prep_path
+    )
     feature, split = prep.manifests["feature_manifest"], prep.manifests["split_manifest"]
     target = payload.get("target_contract", {})
     if feature.get("problem_type") != "continuous_regression" or target.get("column") != feature.get("target_column") or target.get("semantics") != feature.get("target_contract", {}).get("semantics") or target.get("unit") != feature.get("target_contract", {}).get("unit"):
@@ -3694,7 +3690,7 @@ def _load_and_validate_regression_model_selection_handoff(*, project_root: str |
         "do_not_change_feature_policy": True,
         "do_not_change_hyperparameters": True,
         "do_not_change_preprocessing": True,
-        "target_scale": "original MPa scale",
+        "target_scale": f"original {target.get('unit')} scale",
         "prediction_type": "continuous_numeric",
     }
     if instructions != expected_instructions:

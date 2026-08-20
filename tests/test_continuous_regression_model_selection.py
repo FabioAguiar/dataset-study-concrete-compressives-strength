@@ -134,7 +134,9 @@ def test_official_notebook_is_clean_and_sealed_in_code():
     code = "\n".join("".join(c["source"]) for c in notebook["cells"] if c["cell_type"] == "code")
     for cell in (c for c in notebook["cells"] if c["cell_type"] == "code"):
         assert cell["execution_count"] is None and cell["outputs"] == []
-    for forbidden in ("X_test", "y_test", "preparation.test", "threshold-analysis.json",
+    for forbidden in ("X_test", "y_test", "threshold-analysis.json",
                       "average_precision", "macro_f1", "DummyClassifier", "StratifiedKFold",
                       "target_classes", "positive_class", "final-pipeline.joblib"):
         assert forbidden not in code
+    assert "load_and_validate_preparation_for_model_selection" in code
+    assert "load_and_validate_preparation_handoff" not in code

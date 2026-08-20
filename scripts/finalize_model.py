@@ -1846,6 +1846,293 @@ def load_trusted_pipeline_from_bundle(
     return loaded
 
 
+# ---------------------------------------------------------------------------
+# Continuous-regression finalization (v3)
+# ---------------------------------------------------------------------------
+
+from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
+from sklearn.tree import DecisionTreeRegressor
+from scripts.prepare_data import load_and_validate_preparation_for_model_selection
+from scripts.select_models import compute_regression_metrics
+
+
+REGRESSION_FINAL_SCHEMAS: Mapping[str, tuple[str, str]] = {
+    "final-model-manifest.json": ("final-model-manifest.v3", "final_model_manifest"),
+    "final-test-evidence.json": ("final-test-evidence.v3", "final_test_evidence"),
+    "inference-bundle.json": ("inference-bundle.v3", "inference_bundle"),
+    "final-model-handoff.json": ("final-model-handoff.v3", "final_model_handoff"),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class RegressionFrozenFinalizationContract:
+    payload: tuple[tuple[str, Any], ...]
+
+    def as_dict(self) -> dict[str, Any]:
+        return _deepcopy(dict(self.payload))
+
+    @property
+    def fingerprint(self) -> str:
+        return semantic_fingerprint(self.as_dict())
+
+
+def freeze_regression_finalization_decisions(*, handoff: Mapping[str, Any],
+        handoff_path: str, handoff_sha256: str, preparation: Any) -> RegressionFrozenFinalizationContract:
+    if handoff.get("schema_version") != "model-selection-handoff.v3":
+        raise FinalizationContractError("Continuous finalization requires model-selection-handoff.v3.")
+    split = preparation.manifests["split_manifest"]
+    policy = handoff.get("final_training_instructions", {})
+    required_policy = {"fit_partitions": ["train", "validation"], "final_evaluation_partition": "test",
+        "access_test_only_after_contract_freeze_and_final_fit": True, "evaluate_test_once": True,
+        "do_not_retune": True, "do_not_change_feature_policy": True,
+        "do_not_change_hyperparameters": True, "do_not_change_preprocessing": True}
+    if any(policy.get(k) != v for k, v in required_policy.items()):
+        raise FinalizationContractError("Final-training policy is incomplete or divergent.")
+    data = {
+        "dataset_slug": handoff["dataset_slug"], "problem_type": "continuous_regression",
+        "model_selection_handoff": {"path": handoff_path, "sha256": handoff_sha256},
+        "selected_model_id": handoff["selected_model_id"], "selected_model_family": handoff["selected_model_family"],
+        "selected_hyperparameters": handoff["selected_hyperparameters"],
+        "selected_estimator_fixed_constructor_parameters": handoff["selected_estimator_fixed_constructor_parameters"],
+        "random_state": handoff.get("random_seeds", {}).get("estimators"),
+        "feature_policy": handoff["selected_feature_policy"], "feature_order": handoff["selected_feature_columns"],
+        "preprocessing": handoff["selected_preprocessing_contract"], "target_contract": handoff["target_contract"],
+        "training_partitions": ["train", "validation"],
+        "training_row_count": split["row_counts"]["train"] + split["row_counts"]["validation"],
+        "evaluation_partition": "test", "test_reference": preparation.sealed_test_integrity_reference,
+        "test_access_rule": "only_after_final_fit_and_verified_checkpoint", "evaluate_once": True,
+        "do_not_retune": True, "do_not_change_feature_policy": True,
+        "do_not_change_hyperparameters": True, "do_not_change_preprocessing": True,
+    }
+    return RegressionFrozenFinalizationContract(tuple((k, _deepcopy(v)) for k, v in data.items()))
+
+
+def reconstruct_regression_selected_pipeline(contract: RegressionFrozenFinalizationContract) -> Pipeline:
+    data = contract.as_dict(); family = data["selected_model_family"]
+    allowed = {"Ridge": Ridge, "DecisionTreeRegressor": DecisionTreeRegressor,
+        "RandomForestRegressor": RandomForestRegressor,
+        "HistGradientBoostingRegressor": HistGradientBoostingRegressor}
+    if family not in allowed: raise FinalizationContractError(f"Unsupported regression family: {family}")
+    estimator = allowed[family]()
+    accepted = estimator.get_params(deep=False)
+    fixed = data["selected_estimator_fixed_constructor_parameters"]
+    if any(k not in accepted for k in fixed): raise FinalizationContractError("Unsupported fixed constructor parameter.")
+    estimator.set_params(**fixed)
+    selected = {}
+    for key, value in data["selected_hyperparameters"].items():
+        if not key.startswith("model__"): raise FinalizationContractError("Selected parameter lacks model__ prefix.")
+        plain = key.removeprefix("model__")
+        if plain not in accepted: raise FinalizationContractError(f"Unsupported selected parameter: {plain}")
+        selected[plain] = value
+    estimator.set_params(**selected)
+    prep = data["preprocessing"]; features = data["feature_order"]
+    numerical = prep.get("numerical_features", features)
+    transformer = StandardScaler() if prep.get("scale_numerical") else "passthrough"
+    preprocess = ColumnTransformer([("numerical", transformer, numerical)], remainder="drop", sparse_threshold=0.0)
+    pipeline = Pipeline([("preprocess", preprocess), ("model", estimator)])
+    if _is_fitted(pipeline): raise FinalizationContractError("Reconstructed regression pipeline is already fitted.")
+    return pipeline
+
+
+def assemble_regression_final_training_data(*, train: pd.DataFrame, validation: pd.DataFrame,
+        feature_columns: Sequence[str], target_column: str) -> tuple[pd.DataFrame, pd.Series]:
+    combined = pd.concat([train.copy(deep=True), validation.copy(deep=True)], ignore_index=True)
+    y = combined[target_column]
+    if not pd.api.types.is_numeric_dtype(y) or y.isna().any() or not np.isfinite(y.to_numpy(float)).all():
+        raise FinalizationContractError("Final regression target must be complete, numeric, and finite.")
+    return combined.loc[:, list(feature_columns)].copy(deep=True), y.copy(deep=True)
+
+
+def _regression_model_params(bundle: Mapping[str, Any]) -> dict[str, Any]:
+    result = dict(bundle["model_contract"]["fixed_constructor_parameters"])
+    result.update({k.removeprefix("model__"): v for k, v in bundle["model_contract"]["selected_hyperparameters"].items()})
+    return result
+
+
+def _validate_regression_complete_set(directory: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    if not all((directory / n).is_file() for n in FINAL_ARTIFACT_FILENAMES):
+        raise ArtifactConflictError("Regression final artifact set is partial.")
+    payloads = {n: _load_json(directory/n) for n in REGRESSION_FINAL_SCHEMAS}
+    for name, (schema, kind) in REGRESSION_FINAL_SCHEMAS.items():
+        if payloads[name].get("schema_version") != schema or payloads[name].get("artifact_type") != kind:
+            raise FinalizationContractError(f"Invalid continuous v3 artifact: {name}")
+    manifest=payloads["final-model-manifest.json"]; evidence=payloads["final-test-evidence.json"]
+    bundle=payloads["inference-bundle.json"]; handoff=payloads["final-model-handoff.json"]
+    model_path=directory/"final-pipeline.joblib"; model_sha=sha256_file(model_path)
+    if any(p.get("dataset_slug") != manifest.get("dataset_slug") for p in (evidence,bundle,handoff)):
+        raise FinalizationContractError("Continuous final artifacts disagree on dataset_slug.")
+    if model_sha != bundle.get("model_artifact_sha256") or model_sha != manifest.get("model_artifact",{}).get("byte_sha256"):
+        raise UntrustedArtifactError("Continuous final model SHA mismatch.")
+    refs=handoff.get("sibling_references",{})
+    for name in ("final-model-manifest.json","final-test-evidence.json","inference-bundle.json"):
+        if refs.get(name,{}).get("sha256") != sha256_file(directory/name):
+            raise FinalizationContractError(f"Final handoff sibling hash mismatch: {name}")
+    if evidence.get("test_prediction_call_count") != 1 or evidence.get("test_partition_evaluation_count") != 1 or evidence.get("no_post_test_adjustment") is not True:
+        raise FinalizationContractError("One-time test evidence is invalid.")
+    return handoff,bundle,manifest,evidence
+
+
+def _write_regression_final_artifacts(*, output: Path, pipeline: Pipeline, payloads: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    staging=Path(tempfile.mkdtemp(prefix="regression-final-")); promoted=[]
+    try:
+        joblib.dump(pipeline, staging/"final-pipeline.joblib")
+        for name,payload in payloads.items(): (staging/name).write_bytes(canonical_json_bytes(payload)+b"\n")
+        output.mkdir(parents=True,exist_ok=True)
+        if any((output/n).exists() for n in FINAL_ARTIFACT_FILENAMES):
+            raise ArtifactConflictError("Final artifact state changed during promotion.")
+        for name in FINAL_ARTIFACT_FILENAMES:
+            os.replace(staging/name,output/name); promoted.append(name)
+        _validate_regression_complete_set(output)
+        return {"status":"created","sha256":{n:sha256_file(output/n) for n in FINAL_ARTIFACT_FILENAMES}}
+    except Exception:
+        for name in reversed(promoted): (output/name).unlink(missing_ok=True)
+        raise
+    finally: shutil.rmtree(staging,ignore_errors=True)
+
+
+def run_regression_finalization(*, project_root: str|Path, model_selection_handoff_path: str|Path,
+        output_directory: str|Path) -> dict[str, Any]:
+    root=Path(project_root).resolve(); out=(root/_require_relative_path(output_directory,field="output_directory")).resolve()
+    present=[(out/n).exists() for n in FINAL_ARTIFACT_FILENAMES]
+    if any(present):
+        if not all(present): raise ArtifactConflictError("Regression final artifact set is partial.")
+        handoff,bundle,manifest,evidence=_validate_regression_complete_set(out)
+        load_trusted_pipeline_from_bundle(project_root=root,bundle=bundle)
+        return {"status":"reused_equivalent","final_fit_count":0,"test_parse_count":0,"test_predict_count":0,
+            "test_evaluation_count":evidence["test_partition_evaluation_count"],"metrics":evidence["metrics"],
+            "contract_fingerprint":manifest["frozen_finalization_contract_fingerprint"]}
+    selection=load_and_validate_model_selection_handoff(project_root=root,handoff_path=model_selection_handoff_path)
+    selection_rel=str(_require_relative_path(model_selection_handoff_path,field="model_selection_handoff_path"))
+    prep_ref=selection["preparation_handoff_reference"]
+    preparation=load_and_validate_preparation_for_model_selection(project_root=root,preparation_handoff_path=prep_ref["path"])
+    contract=freeze_regression_finalization_decisions(handoff=selection,handoff_path=selection_rel,
+        handoff_sha256=sha256_file(root/selection_rel),preparation=preparation)
+    data=contract.as_dict(); features=data["feature_order"]; target=data["target_contract"]["column"]
+    x,y=assemble_regression_final_training_data(train=preparation.train,validation=preparation.validation,
+        feature_columns=features,target_column=target)
+    pipeline=reconstruct_regression_selected_pipeline(contract); pipeline.fit(x,y)
+    if not _is_fitted(pipeline): raise SerializationValidationError("Regression pipeline did not become fitted.")
+    checkpoint=Path(tempfile.mkdtemp(prefix="regression-checkpoint-"))/"pipeline.joblib"
+    try:
+        joblib.dump(pipeline,checkpoint); checkpoint_sha=sha256_file(checkpoint)
+        trusted=joblib.load(checkpoint)
+        if not _is_fitted(trusted): raise SerializationValidationError("Staging reload is not fitted.")
+        smoke=np.asarray(trusted.predict(x.iloc[:3].copy()),dtype=float)
+        if smoke.shape != (3,) or not np.isfinite(smoke).all(): raise SerializationValidationError("Training smoke failed.")
+    finally: shutil.rmtree(checkpoint.parent,ignore_errors=True)
+    test_ref=data["test_reference"]; test_path=root/_require_relative_path(test_ref["path"],field="test.path")
+    if sha256_file(test_path) != test_ref["sha256"]: raise TestAccessError("Sealed test SHA mismatch.")
+    test=pd.read_csv(test_path)
+    predictions=np.asarray(pipeline.predict(test.loc[:,features].copy()),dtype=float)
+    metrics=compute_regression_metrics(test[target].to_numpy(float),predictions)
+    validation=selection["selected_validation_evidence"]
+    deltas={f"test_{m}_minus_validation_{m}":metrics[m]-validation[m] for m in ("mae","rmse","r2","medae")}
+    model_state=checkpoint_sha; relative_output=str(_require_relative_path(output_directory,field="output_directory"))
+    model_rel=f"{relative_output}/final-pipeline.joblib"
+    common={"dataset_slug":selection["dataset_slug"],"problem_type":"continuous_regression",
+        "selected_model_id":selection["selected_model_id"],"selected_model_family":selection["selected_model_family"],
+        "feature_order":features,"target_contract":selection["target_contract"]}
+    manifest={**common,"schema_version":"final-model-manifest.v3","artifact_type":"final_model_manifest",
+        "model_selection_handoff_reference":{"path":selection_rel,"sha256":sha256_file(root/selection_rel)},
+        "frozen_finalization_contract":data,"frozen_finalization_contract_fingerprint":contract.fingerprint,
+        "selected_hyperparameters":data["selected_hyperparameters"],
+        "selected_estimator_fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],
+        "preprocessing_contract":data["preprocessing"],"training_partitions":["train","validation"],
+        "training_row_count":len(x),"evaluation_partition":"test","test_reference":test_ref,
+        "final_fit_count":1,"test_evaluation_count":1,
+        "model_artifact":{"path":model_rel,"byte_sha256":checkpoint_sha,"state_fingerprint":model_state},
+        "runtime_versions":{"python":platform.python_version(),"scikit_learn":sklearn.__version__,"pandas":pd.__version__},
+        "operational_validity":"unconfirmed","operational_modeling_ready":False}
+    evidence={**common,"schema_version":"final-test-evidence.v3","artifact_type":"final_test_evidence",
+        "partition":"test","partition_reference":test_ref,"row_count":len(test),
+        "metric_contract":{"primary":"mae","unit":selection["target_contract"]["unit"]},"metrics":metrics,
+        "validation_to_test_deltas":deltas,"test_loaded_only_after_final_fit":True,
+        "test_prediction_call_count":1,"test_partition_evaluation_count":1,
+        "test_used_for_model_selection":False,"test_used_for_hyperparameter_selection":False,
+        "test_used_for_feature_selection":False,"test_used_for_preprocessing_selection":False,
+        "no_post_test_adjustment":True}
+    bundle={**common,"schema_version":"inference-bundle.v3","artifact_type":"inference_bundle",
+        "model_artifact_path":model_rel,"model_artifact_sha256":checkpoint_sha,"model_state_fingerprint":model_state,
+        "input_feature_dtypes":{c:str(x[c].dtype) for c in features},"identifier_exclusions":[],
+        "missing_value_policy":"pipeline_contract","preprocessing_contract":data["preprocessing"],
+        "model_contract":{"family":selection["selected_model_family"],"fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],"selected_hyperparameters":data["selected_hyperparameters"]},
+        "prediction_contract":{"type":"continuous_numeric","scale":"original_target_scale","unit":selection["target_contract"]["unit"]},
+        "lineage":{"model_selection":selection_rel,"preparation":prep_ref["path"],"finalization_contract_fingerprint":contract.fingerprint},
+        "runtime_compatibility":{"scikit_learn":sklearn.__version__},"security_note":"Load joblib only after exact SHA-256 verification.",
+        "readiness":{"inference_demo_ready":True,"operational_modeling_ready":False,"operational_validity":"unconfirmed"}}
+    # Materialize model once to obtain its exact final byte digest before JSON references.
+    temp=Path(tempfile.mkdtemp(prefix="regression-model-digest-"))/"m.joblib"
+    try: joblib.dump(pipeline,temp); final_sha=sha256_file(temp)
+    finally: shutil.rmtree(temp.parent,ignore_errors=True)
+    for obj in (manifest,bundle):
+        if obj is manifest: obj["model_artifact"]["byte_sha256"]=final_sha; obj["model_artifact"]["state_fingerprint"]=final_sha
+        else: obj["model_artifact_sha256"]=final_sha; obj["model_state_fingerprint"]=final_sha
+    staging_payloads={"final-model-manifest.json":manifest,"final-test-evidence.json":evidence,"inference-bundle.json":bundle}
+    # Handoff sibling hashes are over canonical bytes exactly as written.
+    siblings={n:{"path":f"{relative_output}/{n}","sha256":sha256_bytes(canonical_json_bytes(p)+b"\n")}
+        for n,p in staging_payloads.items()}
+    final_handoff={**common,"schema_version":"final-model-handoff.v3","artifact_type":"final_model_handoff",
+        "model_selection_handoff_reference":{"path":selection_rel,"sha256":sha256_file(root/selection_rel)},
+        "model_artifact_reference":{"path":model_rel,"sha256":final_sha,"state_fingerprint":final_sha},
+        "sibling_references":siblings,"final_test_metrics":metrics,"validation_to_test_deltas":deltas,
+        "training_partitions":["train","validation"],"training_row_count":len(x),"evaluation_partition":"test",
+        "test_partition_evaluation_count":1,"readiness":{"final_model_trained":True,"final_fit_count":1,
+        "test_partition_opened_after_final_fit":True,"final_test_evaluation_completed":True,
+        "test_partition_evaluated":True,"test_prediction_call_count":1,"no_model_selection_decision_changed_after_test":True,
+        "final_model_artifact_materialized":True,"inference_bundle_materialized":True,"inference_demo_ready":True,
+        "operational_modeling_ready":False,"operational_validity":"unconfirmed"}}
+    staging_payloads["final-model-handoff.json"]=final_handoff
+    result=_write_regression_final_artifacts(output=out,pipeline=pipeline,payloads=staging_payloads)
+    return {**result,"final_fit_count":1,"test_parse_count":1,"test_predict_count":1,"test_evaluation_count":1,
+        "metrics":metrics,"validation_to_test_deltas":deltas,"contract_fingerprint":contract.fingerprint,
+        "model_state_fingerprint":final_sha,"staged_joblib_sha256":final_sha,"test_row_count":len(test)}
+
+
+_load_bundle_v1_v2 = load_and_validate_inference_bundle
+_load_handoff_v1_v2 = load_and_validate_final_model_handoff
+_load_manifest_v1_v2 = globals().get("load_and_validate_final_model_manifest")
+_load_evidence_v1_v2 = globals().get("load_and_validate_final_test_evidence")
+_load_pipeline_v1_v2 = load_trusted_pipeline_from_bundle
+
+
+def load_and_validate_inference_bundle(*, project_root: str|Path, bundle_path: str|Path) -> dict[str,Any]:
+    root=Path(project_root).resolve(); rel=_require_relative_path(bundle_path,field="bundle_path"); preview=_load_json(root/rel)
+    if preview.get("schema_version") != "inference-bundle.v3": return _load_bundle_v1_v2(project_root=root,bundle_path=rel)
+    return _deepcopy(_validate_regression_complete_set((root/rel).parent)[1])
+
+
+def load_and_validate_final_model_handoff(*, project_root: str|Path, handoff_path: str|Path) -> dict[str,Any]:
+    root=Path(project_root).resolve(); rel=_require_relative_path(handoff_path,field="handoff_path"); preview=_load_json(root/rel)
+    if preview.get("schema_version") != "final-model-handoff.v3": return _load_handoff_v1_v2(project_root=root,handoff_path=rel)
+    return _deepcopy(_validate_regression_complete_set((root/rel).parent)[0])
+
+
+def load_and_validate_final_model_manifest(*, project_root: str|Path, manifest_path: str|Path) -> dict[str,Any]:
+    root=Path(project_root).resolve(); rel=_require_relative_path(manifest_path,field="manifest_path"); preview=_load_json(root/rel)
+    if preview.get("schema_version") != "final-model-manifest.v3": return _load_manifest_v1_v2(project_root=root,manifest_path=rel)
+    return _deepcopy(_validate_regression_complete_set((root/rel).parent)[2])
+
+
+def load_and_validate_final_test_evidence(*, project_root: str|Path, evidence_path: str|Path) -> dict[str,Any]:
+    root=Path(project_root).resolve(); rel=_require_relative_path(evidence_path,field="evidence_path"); preview=_load_json(root/rel)
+    if preview.get("schema_version") != "final-test-evidence.v3": return _load_evidence_v1_v2(project_root=root,evidence_path=rel)
+    return _deepcopy(_validate_regression_complete_set((root/rel).parent)[3])
+
+
+def load_trusted_pipeline_from_bundle(*, project_root: str|Path, bundle: Mapping[str,Any]) -> Pipeline:
+    if bundle.get("schema_version") != "inference-bundle.v3": return _load_pipeline_v1_v2(project_root=project_root,bundle=bundle)
+    root=Path(project_root).resolve(); rel=_require_relative_path(bundle["model_artifact_path"],field="model_artifact_path"); path=root/rel
+    if sha256_file(path) != bundle.get("model_artifact_sha256"): raise UntrustedArtifactError("Refusing to load regression joblib with divergent SHA-256.")
+    loaded=joblib.load(path)
+    if not _is_fitted(loaded) or loaded.named_steps["model"].__class__.__name__ != bundle["model_contract"]["family"]:
+        raise SerializationValidationError("Trusted regression pipeline contract mismatch.")
+    params=loaded.named_steps["model"].get_params(deep=False)
+    if any(params.get(k)!=v for k,v in _regression_model_params(bundle).items()): raise SerializationValidationError("Regression model parameters differ.")
+    return loaded
+
+
 # Explicit aliases retained for a readable notebook API.
 validate_finalization_contract = validate_finalization_contract
 
@@ -3806,4 +4093,41 @@ def load_trusted_pipeline_from_bundle(
         raise SerializationValidationError("Loaded multiclass fitted-state descriptor differs.")
     if fingerprint != bundle.get("model_state_fingerprint"):
         raise SerializationValidationError("Loaded multiclass fitted-state fingerprint differs.")
+    return loaded
+
+
+_dispatch_bundle_v12 = load_and_validate_inference_bundle
+_dispatch_handoff_v12 = load_and_validate_final_model_handoff
+_dispatch_manifest_v12 = load_and_validate_final_model_manifest
+_dispatch_evidence_v12 = load_and_validate_final_test_evidence
+_dispatch_pipeline_v12 = load_trusted_pipeline_from_bundle
+
+def load_and_validate_inference_bundle(*, project_root, bundle_path):
+    root=Path(project_root).resolve(); rel=_require_relative_path(bundle_path,field="bundle_path")
+    if _load_json(root/rel).get("schema_version") != "inference-bundle.v3": return _dispatch_bundle_v12(project_root=root,bundle_path=rel)
+    return _deepcopy(_validate_regression_complete_set((root/rel).parent)[1])
+
+def load_and_validate_final_model_handoff(*, project_root, handoff_path):
+    root=Path(project_root).resolve(); rel=_require_relative_path(handoff_path,field="handoff_path")
+    if _load_json(root/rel).get("schema_version") != "final-model-handoff.v3": return _dispatch_handoff_v12(project_root=root,handoff_path=rel)
+    return _deepcopy(_validate_regression_complete_set((root/rel).parent)[0])
+
+def load_and_validate_final_model_manifest(*, project_root, manifest_path):
+    root=Path(project_root).resolve(); rel=_require_relative_path(manifest_path,field="manifest_path")
+    if _load_json(root/rel).get("schema_version") != "final-model-manifest.v3": return _dispatch_manifest_v12(project_root=root,manifest_path=rel)
+    return _deepcopy(_validate_regression_complete_set((root/rel).parent)[2])
+
+def load_and_validate_final_test_evidence(*, project_root, evidence_path):
+    root=Path(project_root).resolve(); rel=_require_relative_path(evidence_path,field="evidence_path")
+    if _load_json(root/rel).get("schema_version") != "final-test-evidence.v3": return _dispatch_evidence_v12(project_root=root,evidence_path=rel)
+    return _deepcopy(_validate_regression_complete_set((root/rel).parent)[3])
+
+def load_trusted_pipeline_from_bundle(*, project_root, bundle):
+    if bundle.get("schema_version") != "inference-bundle.v3": return _dispatch_pipeline_v12(project_root=project_root,bundle=bundle)
+    root=Path(project_root).resolve(); rel=_require_relative_path(bundle["model_artifact_path"],field="model_artifact_path"); path=root/rel
+    if sha256_file(path) != bundle.get("model_artifact_sha256"): raise UntrustedArtifactError("Refusing to load regression joblib with divergent SHA-256.")
+    loaded=joblib.load(path)
+    if not _is_fitted(loaded) or loaded.named_steps["model"].__class__.__name__ != bundle["model_contract"]["family"]: raise SerializationValidationError("Trusted regression pipeline contract mismatch.")
+    params=loaded.named_steps["model"].get_params(deep=False)
+    if any(params.get(k)!=v for k,v in _regression_model_params(bundle).items()): raise SerializationValidationError("Regression model parameters differ.")
     return loaded

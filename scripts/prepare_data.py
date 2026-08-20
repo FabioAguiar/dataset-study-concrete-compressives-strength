@@ -506,6 +506,44 @@ class PreparationHandoff:
         return {name: _copy_mapping(value) for name, value in self._manifests}
 
 
+@dataclass(frozen=True, slots=True)
+class ModelSelectionPreparationHandoff:
+    """Preparation view that cannot materialize prepared or test tabular data."""
+
+    _train: pd.DataFrame
+    _validation: pd.DataFrame
+    _manifests: tuple[tuple[str, Mapping[str, Any]], ...]
+    _prepared_integrity_reference: tuple[tuple[str, Any], ...]
+    _test_integrity_reference: tuple[tuple[str, Any], ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_train", _copy_frame(self._train))
+        object.__setattr__(self, "_validation", _copy_frame(self._validation))
+        object.__setattr__(self, "_manifests", tuple(
+            (name, _copy_mapping(value)) for name, value in self._manifests
+        ))
+
+    @property
+    def train(self) -> pd.DataFrame:
+        return _copy_frame(self._train)
+
+    @property
+    def validation(self) -> pd.DataFrame:
+        return _copy_frame(self._validation)
+
+    @property
+    def manifests(self) -> dict[str, dict[str, Any]]:
+        return {name: _copy_mapping(value) for name, value in self._manifests}
+
+    @property
+    def prepared_integrity_reference(self) -> dict[str, Any]:
+        return _mapping_from_tuple(self._prepared_integrity_reference)
+
+    @property
+    def sealed_test_integrity_reference(self) -> dict[str, Any]:
+        return _mapping_from_tuple(self._test_integrity_reference)
+
+
 def fingerprint_file(path: str | Path, *, chunk_size: int = 1024 * 1024) -> str:
     """Return the SHA-256 digest of the bytes stored in ``path``."""
     file_path = Path(path)
@@ -2599,6 +2637,7 @@ def load_and_validate_preparation_handoff(
     feature_manifest_path: str | Path | None = None,
     split_manifest_path: str | Path | None = None,
     quality_evidence_path: str | Path | None = None,
+    _model_selection_safe: bool = False,
 ) -> PreparationHandoff:
     """Load persisted artifacts, verify fingerprints, and return the handoff."""
     root = Path(project_root).expanduser().resolve()
@@ -2799,19 +2838,21 @@ def load_and_validate_preparation_handoff(
     expected_prepared_sha = preparation_manifest.get("prepared_sha256")
     if fingerprint_file(prepared_path) != expected_prepared_sha:
         raise HandoffValidationError("Prepared CSV fingerprint mismatch.")
-    prepared = pd.read_csv(prepared_path)
     expected_columns = feature_manifest.get("identifier_columns", []) + feature_manifest.get(
         "feature_columns", []
     ) + [feature_manifest.get("target_column")]
     # Feature order is not necessarily contiguous with identifiers/target in the
     # source schema, so the preparation manifest remains authoritative.
     authoritative_columns = preparation_manifest.get("column_order")
-    if list(prepared.columns) != authoritative_columns:
-        raise HandoffValidationError("Prepared CSV column order mismatch.")
-    if len(prepared) != preparation_manifest.get("prepared_row_count"):
-        raise HandoffValidationError("Prepared CSV row count mismatch.")
     if set(expected_columns) != set(authoritative_columns):
         raise HandoffValidationError("Feature roles do not cover prepared columns.")
+
+    prepared = None if _model_selection_safe else pd.read_csv(prepared_path)
+    if prepared is not None:
+        if list(prepared.columns) != authoritative_columns:
+            raise HandoffValidationError("Prepared CSV column order mismatch.")
+        if len(prepared) != preparation_manifest.get("prepared_row_count"):
+            raise HandoffValidationError("Prepared CSV row count mismatch.")
 
     loaded_partitions: dict[str, pd.DataFrame] = {}
     partition_sha = split_manifest.get("partition_sha256", {})
@@ -2824,6 +2865,8 @@ def load_and_validate_preparation_handoff(
             raise HandoffValidationError(
                 f"Partition CSV fingerprint mismatch: {name}."
             )
+        if _model_selection_safe and name == "test":
+            continue
         frame = pd.read_csv(path)
         if list(frame.columns) != authoritative_columns:
             raise HandoffValidationError(
@@ -2835,7 +2878,7 @@ def load_and_validate_preparation_handoff(
             )
         loaded_partitions[name] = frame
 
-    partition_set = DatasetPartitions(
+    partition_set = None if _model_selection_safe else DatasetPartitions(
         _train=loaded_partitions["train"],
         _validation=loaded_partitions["validation"],
         _test=loaded_partitions["test"],
@@ -2857,7 +2900,19 @@ def load_and_validate_preparation_handoff(
             )
         ),
     )
-    if feature_manifest.get("problem_type") == "continuous_regression":
+    if _model_selection_safe:
+        target_column = feature_manifest.get("target_column")
+        for name in ("train", "validation"):
+            frame = loaded_partitions[name]
+            if list(frame.columns) != authoritative_columns:
+                raise HandoffValidationError(f"Partition '{name}' column order mismatch.")
+            target = frame[target_column]
+            if (not pandas_types.is_numeric_dtype(target) or target.isna().any()
+                    or not all(math.isfinite(float(value)) for value in target)):
+                raise HandoffValidationError(
+                    f"Partition '{name}' target must be complete, numeric, and finite."
+                )
+    elif feature_manifest.get("problem_type") == "continuous_regression":
         validate_regression_partitions(
             prepared, partition_set,
             identifier_columns=feature_manifest["identifier_columns"],
@@ -2960,6 +3015,25 @@ def load_and_validate_preparation_handoff(
     if handoff_manifest is not None:
         manifest_items.append(("preparation_handoff", handoff_manifest))
     manifests = tuple(manifest_items)
+    if _model_selection_safe:
+        test_relative = partition_paths["test"]
+        return ModelSelectionPreparationHandoff(
+            _train=loaded_partitions["train"],
+            _validation=loaded_partitions["validation"],
+            _manifests=manifests,
+            _prepared_integrity_reference=_tuple_mapping({
+                "path": prepared_relative,
+                "sha256": expected_prepared_sha,
+                "row_count": preparation_manifest.get("prepared_row_count"),
+            }),
+            _test_integrity_reference=_tuple_mapping({
+                "path": test_relative,
+                "sha256": partition_sha["test"],
+                "row_count": split_manifest.get("row_counts", {}).get("test"),
+                "sealed": True,
+                "evaluated": False,
+            }),
+        )
     return PreparationHandoff(
         _prepared=prepared,
         _train=loaded_partitions["train"],
@@ -2967,3 +3041,12 @@ def load_and_validate_preparation_handoff(
         _test=loaded_partitions["test"],
         _manifests=manifests,
     )
+
+
+def load_and_validate_preparation_for_model_selection(**kwargs: Any) -> ModelSelectionPreparationHandoff:
+    """Authenticate preparation while parsing only train and validation CSVs."""
+    result = load_and_validate_preparation_handoff(
+        **kwargs, _model_selection_safe=True
+    )
+    assert isinstance(result, ModelSelectionPreparationHandoff)
+    return result
