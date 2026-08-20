@@ -1,9 +1,6 @@
 import copy
 import json
-import shutil
 from pathlib import Path
-
-import pandas as pd
 import pytest
 
 from scripts.select_models import (
@@ -14,19 +11,13 @@ from scripts.select_models import (
     write_regression_model_selection_artifacts,
 )
 import scripts.select_models as sm
+from tests._continuous_model_selection_fixtures import (
+    SELECTION_HANDOFF, build_synthetic_preparation, synthetic_selection_artifacts,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "artifacts/model-selection/concrete-compressive-strength"
-
-
-def _artifacts():
-    result = {}
-    for name in REGRESSION_ARTIFACT_FILENAMES:
-        path = SOURCE / name
-        result[name] = (pd.read_csv(path) if name.endswith(".csv")
-                        else json.loads(path.read_text()))
-    return result
+def _artifacts(root):
+    return synthetic_selection_artifacts(build_synthetic_preparation(root))
 
 
 def test_contract_unit_is_generic():
@@ -45,20 +36,18 @@ def test_contract_unit_is_generic():
 
 
 def test_valid_write_reload_and_equivalent_reuse(tmp_path):
-    out = tmp_path / "artifacts/model-selection/concrete-compressive-strength"
-    first = write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts())
+    out = tmp_path / SELECTION_HANDOFF.parent
+    artifacts = _artifacts(tmp_path)
+    first = write_regression_model_selection_artifacts(output_directory=out, artifacts=artifacts)
     assert not first.idempotent
-    second = write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts())
+    second = write_regression_model_selection_artifacts(output_directory=out, artifacts=artifacts)
     assert second.idempotent
     # The public loader needs the authenticated preparation lineage too.
-    shutil.copytree(ROOT / "artifacts/preparation", tmp_path / "artifacts/preparation")
-    shutil.copytree(ROOT / "artifacts/exploration", tmp_path / "artifacts/exploration")
-    shutil.copytree(ROOT / "data", tmp_path / "data")
     loaded = load_and_validate_model_selection_handoff(
         project_root=tmp_path,
-        handoff_path="artifacts/model-selection/concrete-compressive-strength/model-selection-handoff.json",
+        handoff_path=SELECTION_HANDOFF,
     )
-    assert loaded["selected_model_id"] == "hist_gradient_boosting"
+    assert loaded["selected_model_id"] == "synthetic_ridge"
 
 
 @pytest.mark.parametrize("mutation", [
@@ -66,13 +55,13 @@ def test_valid_write_reload_and_equivalent_reuse(tmp_path):
     "feature", "winner", "readiness",
 ])
 def test_writer_fails_closed_for_scientific_manifest_changes(tmp_path, mutation):
-    artifacts = _artifacts()
+    artifacts = _artifacts(tmp_path)
     out = tmp_path / "selection"
     write_regression_model_selection_artifacts(output_directory=out, artifacts=artifacts)
-    changed = _artifacts()
+    changed = _artifacts(tmp_path)
     manifest = changed["model-selection-manifest.json"]
     if mutation == "target": manifest["target_contract"]["column"] = "other"
-    elif mutation == "target_unit": manifest["target_contract"]["unit"] = "kWh"
+    elif mutation == "target_unit": manifest["target_contract"]["unit"] = "kg"
     elif mutation == "metric": manifest["model_selection_contract"]["primary_metric"] = "rmse"
     elif mutation == "cv": manifest["cv_contract"]["n_splits"] = 4
     elif mutation == "family": manifest["candidate_families"][0]["family"] = "OtherRegressor"
@@ -85,9 +74,9 @@ def test_writer_fails_closed_for_scientific_manifest_changes(tmp_path, mutation)
 
 
 def test_writer_reuses_volatile_metadata_only(tmp_path):
-    artifacts = _artifacts(); out = tmp_path / "selection"
+    artifacts = _artifacts(tmp_path); out = tmp_path / "selection"
     write_regression_model_selection_artifacts(output_directory=out, artifacts=artifacts)
-    changed = _artifacts()
+    changed = _artifacts(tmp_path)
     changed["model-selection-manifest.json"]["generated_at"] = "2099-01-01T00:00:00Z"
     assert write_regression_model_selection_artifacts(
         output_directory=out, artifacts=changed
@@ -95,10 +84,10 @@ def test_writer_reuses_volatile_metadata_only(tmp_path):
 
 
 def test_writer_reuses_equivalent_artifacts_across_runtime_versions(tmp_path):
-    artifacts = _artifacts()
+    artifacts = _artifacts(tmp_path)
     out = tmp_path / "selection"
     write_regression_model_selection_artifacts(output_directory=out, artifacts=artifacts)
-    changed = _artifacts()
+    changed = _artifacts(tmp_path)
     changed["model-selection-manifest.json"]["runtime_versions"] = {
         "python": "different-kernel",
         "pandas": "different-runtime",
@@ -113,10 +102,10 @@ def test_writer_reuses_equivalent_artifacts_across_runtime_versions(tmp_path):
 
 def test_writer_rejects_partial_set(tmp_path):
     out = tmp_path / "selection"
-    write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts())
+    write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts(tmp_path))
     (out / "selection-analysis.json").unlink()
     with pytest.raises(ArtifactConflictError):
-        write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts())
+        write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts(tmp_path))
 
 
 def test_writer_atomic_rollback_on_promotion_failure(tmp_path, monkeypatch):
@@ -134,23 +123,27 @@ def test_writer_atomic_rollback_on_promotion_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sm.os, "replace", fail_during_promotion)
     with pytest.raises(OSError, match="injected"):
-        write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts())
+        write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts(tmp_path))
     assert not any((out / name).exists() for name in REGRESSION_ARTIFACT_FILENAMES)
 
 
-def test_runtime_loader_is_defensive():
-    one = load_and_validate_model_selection_handoff(project_root=ROOT, handoff_path=SOURCE.relative_to(ROOT) / "model-selection-handoff.json")
+def test_runtime_loader_is_defensive(tmp_path):
+    artifacts = _artifacts(tmp_path)
+    write_regression_model_selection_artifacts(
+        output_directory=tmp_path / SELECTION_HANDOFF.parent, artifacts=artifacts
+    )
+    one = load_and_validate_model_selection_handoff(project_root=tmp_path, handoff_path=SELECTION_HANDOFF)
     one["target_contract"]["unit"] = "kg"
-    two = load_and_validate_model_selection_handoff(project_root=ROOT, handoff_path=SOURCE.relative_to(ROOT) / "model-selection-handoff.json")
-    assert two["target_contract"]["unit"] == "MPa"
+    two = load_and_validate_model_selection_handoff(project_root=tmp_path, handoff_path=SELECTION_HANDOFF)
+    assert two["target_contract"]["unit"] == "kWh"
 
 
 @pytest.mark.parametrize("filename", REGRESSION_ARTIFACT_FILENAMES)
 def test_loader_rejects_corrupted_v3_component(tmp_path, filename):
-    out = tmp_path / "artifacts/model-selection/concrete-compressive-strength"
-    write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts())
+    out = tmp_path / SELECTION_HANDOFF.parent
+    write_regression_model_selection_artifacts(output_directory=out, artifacts=_artifacts(tmp_path))
     path = out / filename
-    path.write_bytes(path.read_bytes() + b"\n")
+    path.write_bytes(path.read_bytes() + b"corrupt")
     with pytest.raises(Exception):
         load_and_validate_model_selection_handoff(
             project_root=tmp_path,
@@ -160,7 +153,7 @@ def test_loader_rejects_corrupted_v3_component(tmp_path, filename):
 
 @pytest.mark.parametrize("field,value", [
     ("selected_model_id", "ridge"),
-    ("selected_model_family", "Ridge"),
+    ("selected_model_family", "OtherRegressor"),
     ("selected_hyperparameters", {"model__alpha": 1.0}),
     ("selected_feature_columns", ["Age"]),
     ("primary_metric", "rmse"),
@@ -173,13 +166,10 @@ def test_loader_rejects_corrupted_v3_component(tmp_path, filename):
     ("model_bundle_materialized", True),
 ])
 def test_loader_rejects_divergent_handoff_contract(tmp_path, field, value):
-    artifacts = _artifacts()
+    artifacts = _artifacts(tmp_path)
     artifacts["model-selection-handoff.json"][field] = value
-    out = tmp_path / "artifacts/model-selection/concrete-compressive-strength"
+    out = tmp_path / SELECTION_HANDOFF.parent
     write_regression_model_selection_artifacts(output_directory=out, artifacts=artifacts)
-    shutil.copytree(ROOT / "artifacts/preparation", tmp_path / "artifacts/preparation")
-    shutil.copytree(ROOT / "artifacts/exploration", tmp_path / "artifacts/exploration")
-    shutil.copytree(ROOT / "data", tmp_path / "data")
     with pytest.raises(Exception):
         load_and_validate_model_selection_handoff(
             project_root=tmp_path,
@@ -188,7 +178,7 @@ def test_loader_rejects_divergent_handoff_contract(tmp_path, field, value):
 
 
 def test_loader_rejects_path_escape(tmp_path):
-    artifacts = _artifacts()
+    artifacts = _artifacts(tmp_path)
     artifacts["model-selection-handoff.json"]["preparation_handoff_reference"]["path"] = "../escape.json"
     out = tmp_path / "selection"
     write_regression_model_selection_artifacts(output_directory=out, artifacts=artifacts)
