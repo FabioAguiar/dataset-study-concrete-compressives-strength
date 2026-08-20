@@ -250,14 +250,16 @@ def _require_mapping(value: Any, *, field: str) -> Mapping[str, Any]:
 
 
 def _schema_version(
-    payload: Mapping[str, Any], *, artifact: str, v1_schema: str, v2_schema: str
+    payload: Mapping[str, Any], *, artifact: str, v1_schema: str, v2_schema: str,
+    v3_schema: str | None = None,
 ) -> str:
     """Return a supported schema, retaining legacy schema-less v1 test fixtures."""
 
     observed = payload.get("schema_version")
     if observed is None:
         return v1_schema
-    if observed not in {v1_schema, v2_schema}:
+    supported = {v1_schema, v2_schema} | ({v3_schema} if v3_schema else set())
+    if observed not in supported:
         raise InferenceContractError(
             f"Unsupported {artifact} schema: {observed!r}."
         )
@@ -270,6 +272,7 @@ def _inference_bundle_schema(bundle: Mapping[str, Any]) -> str:
         artifact="inference bundle",
         v1_schema="inference-bundle.v1",
         v2_schema="inference-bundle.v2",
+        v3_schema="inference-bundle.v3",
     )
 
 
@@ -279,6 +282,7 @@ def _final_handoff_schema(handoff: Mapping[str, Any]) -> str:
         artifact="final-model handoff",
         v1_schema="final-model-handoff.v1",
         v2_schema="final-model-handoff.v2",
+        v3_schema="final-model-handoff.v3",
     )
 
 
@@ -292,6 +296,8 @@ def _validate_matching_schema_generations(
         "final-model-handoff.v2": "v2",
         "inference-bundle.v1": "v1",
         "inference-bundle.v2": "v2",
+        "final-model-handoff.v3": "v3",
+        "inference-bundle.v3": "v3",
     }
     if generations[handoff_schema] != generations[bundle_schema]:
         raise InferenceContractError(
@@ -436,7 +442,26 @@ def validate_inference_readiness(
     if generation == "v1":
         _validate_inference_readiness_v1(handoff, bundle)
         return
-    validate_multiclass_inference_readiness(handoff, bundle)
+    if generation == "v2":
+        validate_multiclass_inference_readiness(handoff, bundle)
+        return
+    validate_continuous_inference_readiness(handoff, bundle)
+
+
+def validate_continuous_inference_readiness(
+    handoff: Mapping[str, Any], bundle: Mapping[str, Any]
+) -> None:
+    """Validate fail-closed demo readiness and limitations for v3."""
+    if _validate_matching_schema_generations(handoff, bundle) != "v3":
+        raise InferenceContractError("Continuous readiness requires v3 artifacts.")
+    hr = _require_mapping(handoff.get("readiness"), field="handoff.readiness")
+    br = _require_mapping(bundle.get("readiness"), field="bundle.readiness")
+    for field, expected in {"inference_demo_ready": True, "operational_modeling_ready": False, "operational_validity": "unconfirmed"}.items():
+        if hr.get(field) != expected or br.get(field) != expected:
+            raise InferenceContractError(f"Continuous readiness mismatch for {field}.")
+    for field, expected in {"final_fit_count": 1, "test_partition_evaluation_count": 1, "test_prediction_call_count": 1, "test_partition_used_for_adjustment": False, "no_model_selection_decision_changed_after_test": True}.items():
+        if hr.get(field) != expected:
+            raise InferenceContractError(f"Continuous handoff mismatch for {field}.")
 
 
 def _validate_bundle_handoff_alignment_v1(
@@ -618,9 +643,43 @@ def validate_bundle_handoff_alignment(
             handoff, bundle, manifest=manifest
         )
         return
-    validate_multiclass_bundle_handoff_alignment(
-        handoff, bundle, manifest=manifest
-    )
+    if generation == "v2":
+        validate_multiclass_bundle_handoff_alignment(handoff, bundle, manifest=manifest)
+        return
+    validate_continuous_bundle_handoff_alignment(handoff, bundle, manifest=manifest)
+
+
+def validate_continuous_bundle_handoff_alignment(
+    handoff: Mapping[str, Any], bundle: Mapping[str, Any], *, manifest: Mapping[str, Any] | None = None
+) -> None:
+    """Validate v3 identity, contracts, references, and runtime alignment."""
+    if _validate_matching_schema_generations(handoff, bundle) != "v3":
+        raise InferenceContractError("Continuous alignment requires v3 artifacts.")
+    for field in ("dataset_slug", "problem_type", "selected_model_id", "selected_model_family", "feature_order", "target_contract", "prediction_contract", "preprocessing_contract"):
+        if handoff.get(field) != bundle.get(field):
+            raise InferenceContractError(f"Continuous handoff/bundle mismatch at {field}.")
+    model_ref = _require_mapping(handoff.get("model_artifact_reference"), field="handoff.model_artifact_reference")
+    if (model_ref.get("path"), model_ref.get("sha256"), model_ref.get("state_fingerprint")) != (bundle.get("model_artifact_path"), bundle.get("model_artifact_sha256"), bundle.get("model_state_fingerprint")):
+        raise InferenceContractError("Continuous model reference differs from bundle.")
+    siblings = _require_mapping(handoff.get("sibling_references"), field="handoff.sibling_references")
+    for ref_name, sibling_name in (("bundle_reference", "inference-bundle.json"), ("manifest_reference", "final-model-manifest.json")):
+        if handoff.get(ref_name) != siblings.get(sibling_name):
+            raise InferenceContractError(f"Continuous sibling reference differs for {sibling_name}.")
+    if manifest is None:
+        return
+    model_contract = _require_mapping(bundle.get("model_contract"), field="bundle.model_contract")
+    for field in ("dataset_slug", "problem_type", "selected_model_id", "selected_model_family", "target_contract", "preprocessing_contract"):
+        if manifest.get(field) != bundle.get(field):
+            raise InferenceContractError(f"Continuous manifest/bundle mismatch at {field}.")
+    if manifest.get("selected_hyperparameters") != model_contract.get("selected_hyperparameters"):
+        raise InferenceContractError("Continuous selected hyperparameters differ.")
+    artifact = _require_mapping(manifest.get("model_artifact"), field="manifest.model_artifact")
+    if (artifact.get("path"), artifact.get("byte_sha256"), artifact.get("state_fingerprint")) != (bundle.get("model_artifact_path"), bundle.get("model_artifact_sha256"), bundle.get("model_state_fingerprint")):
+        raise InferenceContractError("Continuous manifest model reference differs.")
+    runtime = _require_mapping(manifest.get("runtime_versions"), field="manifest.runtime_versions")
+    for component, version in _require_mapping(bundle.get("runtime_compatibility"), field="bundle.runtime_compatibility").items():
+        if runtime.get(component) != version:
+            raise InferenceContractError(f"Continuous runtime mismatch for {component}.")
 
 
 def _portable_relative_path(value: Any, *, field: str) -> PurePosixPath:
@@ -688,13 +747,13 @@ def _load_json_object(path: Path, *, label: str) -> dict[str, Any]:
 def _manifest_from_handoff(
     *, project_root: Path, handoff: Mapping[str, Any]
 ) -> dict[str, Any]:
-    references = _require_mapping(
-        handoff.get("final_references"), field="handoff.final_references"
-    )
-    reference = _require_mapping(
-        references.get("final_model_manifest"),
-        field="handoff.final_references.final_model_manifest",
-    )
+    if _final_handoff_schema(handoff) == "final-model-handoff.v3":
+        reference = _require_mapping(handoff.get("manifest_reference"), field="handoff.manifest_reference")
+        hash_field = "sha256"
+    else:
+        references = _require_mapping(handoff.get("final_references"), field="handoff.final_references")
+        reference = _require_mapping(references.get("final_model_manifest"), field="handoff.final_references.final_model_manifest")
+        hash_field = "byte_sha256"
     relative = _portable_relative_path(reference.get("path"), field="final model manifest path")
     path = (project_root.joinpath(*relative.parts)).resolve()
     try:
@@ -704,13 +763,13 @@ def _manifest_from_handoff(
     if not path.is_file():
         raise FileNotFoundError(f"Final model manifest not found: {relative.as_posix()}")
     observed = _sha256_file(path)
-    expected = str(reference.get("byte_sha256", ""))
+    expected = str(reference.get(hash_field, ""))
     if observed != expected:
         raise InferenceContractError(
             "Final model manifest SHA-256 mismatch: "
             f"expected={expected}, observed={observed}"
         )
-    if _final_handoff_schema(handoff) == "final-model-handoff.v2":
+    if _final_handoff_schema(handoff) in {"final-model-handoff.v2", "final-model-handoff.v3"}:
         return load_and_validate_final_model_manifest(
             project_root=project_root,
             manifest_path=relative.as_posix(),
@@ -737,16 +796,12 @@ def load_validated_inference_pipeline(
         project_root=root, bundle_path=bundle_path
     )
     validate_inference_readiness(handoff, bundle)
-    validate_model_artifact_before_load(
-        project_root=root, bundle=bundle, handoff=handoff
-    )
     manifest = _manifest_from_handoff(project_root=root, handoff=handoff)
     validate_bundle_handoff_alignment(handoff, bundle, manifest=manifest)
+    validate_model_artifact_before_load(project_root=root, bundle=bundle, handoff=handoff, manifest=manifest)
+    runtime_contract = manifest.get("runtime_versions") if _inference_bundle_schema(bundle) == "inference-bundle.v3" else bundle.get("runtime_version_requirements")
     report = validate_runtime_compatibility(
-        _require_mapping(
-            bundle.get("runtime_version_requirements"),
-            field="bundle.runtime_version_requirements",
-        ),
+        _require_mapping(runtime_contract, field="runtime version contract"),
         observed_versions=observed_runtime_versions,
         mode="load_safe",
         raise_on_incompatible=True,
@@ -1297,9 +1352,129 @@ def validate_loaded_pipeline_contract(
             pipeline, bundle=bundle, manifest=manifest
         )
         return
-    validate_multiclass_loaded_pipeline_contract(
-        pipeline, bundle=bundle, manifest=manifest
-    )
+    if schema == "inference-bundle.v2":
+        validate_multiclass_loaded_pipeline_contract(pipeline, bundle=bundle, manifest=manifest)
+        return
+    validate_continuous_loaded_pipeline_contract(pipeline, bundle=bundle, manifest=manifest)
+
+
+def _validate_continuous_contract(bundle: Mapping[str, Any]) -> tuple[list[str], str]:
+    features = list(bundle.get("feature_order", ()))
+    dtypes = _require_mapping(bundle.get("input_feature_dtypes"), field="bundle.input_feature_dtypes")
+    if not features or len(features) != len(set(features)) or set(dtypes) != set(features):
+        raise InferenceContractError("Continuous feature/dtype contract is invalid.")
+    for feature in features:
+        spec = _require_mapping(dtypes[feature], field=f"input_feature_dtypes.{feature}")
+        if spec.get("dtype") not in {"float64", "int64"} or spec.get("role") != "numerical_feature":
+            raise InferenceContractError(f"Unsupported continuous dtype contract for {feature}.")
+    prediction = _require_mapping(bundle.get("prediction_contract"), field="bundle.prediction_contract")
+    target = _require_mapping(bundle.get("target_contract"), field="bundle.target_contract")
+    unit = prediction.get("unit")
+    if prediction.get("type") != "continuous_numeric" or prediction.get("scale") != "original_target_scale":
+        raise InferenceContractError("Continuous prediction contract is invalid.")
+    if not isinstance(unit, str) or not unit.strip() or unit != target.get("unit"):
+        raise InferenceContractError("Prediction and target units must be equal and non-empty.")
+    return features, unit
+
+
+def normalize_continuous_inference_input(
+    value: Mapping[str, Any] | pd.Series | pd.DataFrame, *, bundle: Mapping[str, Any]
+) -> pd.DataFrame:
+    """Strictly validate ordered v3 input without silently reordering it."""
+    if _inference_bundle_schema(bundle) != "inference-bundle.v3":
+        raise InferenceContractError("Continuous input requires a v3 bundle.")
+    features, _ = _validate_continuous_contract(bundle)
+    frame = _as_input_dataframe(value)
+    if frame.empty:
+        raise InferenceInputError("Inference input must contain at least one row.")
+    if frame.columns.duplicated().any():
+        raise InferenceInputError("Inference input contains duplicate columns.")
+    missing = [name for name in features if name not in frame.columns]
+    extras = [name for name in frame.columns if name not in features]
+    if missing:
+        raise InferenceInputError("Missing required input columns: " + ", ".join(missing))
+    if extras:
+        raise InferenceInputError("Unexpected input columns are not accepted: " + ", ".join(map(str, extras)))
+    if list(frame.columns) != features:
+        raise InferenceInputError("Input feature order differs from bundle.feature_order.")
+    result = pd.DataFrame(index=frame.index.copy())
+    specs = _require_mapping(bundle["input_feature_dtypes"], field="bundle.input_feature_dtypes")
+    for feature in features:
+        try:
+            numeric = pd.to_numeric(frame[feature], errors="raise")
+        except (TypeError, ValueError) as exc:
+            raise InferenceInputError(f"Input column {feature} must be numeric.") from exc
+        values = np.asarray(numeric, dtype=float)
+        if not np.isfinite(values).all():
+            raise InferenceInputError(f"Input column {feature} must contain finite values.")
+        dtype = _require_mapping(specs[feature], field=f"input_feature_dtypes.{feature}")["dtype"]
+        if dtype == "int64" and not np.equal(values, np.trunc(values)).all():
+            raise InferenceInputError(f"Input column {feature} must contain integral values.")
+        try:
+            result[feature] = numeric.astype(dtype)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise InferenceInputError(f"Input column {feature} cannot be represented as {dtype}.") from exc
+    return result
+
+
+def validate_continuous_loaded_pipeline_contract(
+    pipeline: Any, *, bundle: Mapping[str, Any], manifest: Mapping[str, Any] | None = None,
+) -> None:
+    """Validate the fitted continuous v3 pipeline without fitting it."""
+    features, _ = _validate_continuous_contract(bundle)
+    if not isinstance(pipeline, Pipeline) or list(pipeline.named_steps) != ["preprocess", "model"]:
+        raise InferenceContractError("Pipeline steps must be exactly preprocess then model.")
+    preprocess, model = pipeline.named_steps.values()
+    if not isinstance(preprocess, ColumnTransformer):
+        raise InferenceContractError("Pipeline preprocess step must be ColumnTransformer.")
+    try:
+        check_is_fitted(pipeline); check_is_fitted(preprocess); check_is_fitted(model)
+    except Exception as exc:
+        raise InferenceContractError("Loaded pipeline must already be fitted.") from exc
+    contract = _require_mapping(bundle.get("model_contract"), field="bundle.model_contract")
+    descriptor = _require_mapping(bundle.get("model_state_descriptor"), field="bundle.model_state_descriptor")
+    if model.__class__.__name__ != contract.get("family") or list(getattr(pipeline, "feature_names_in_", ())) != features or int(getattr(pipeline, "n_features_in_", -1)) != len(features):
+        raise InferenceContractError("Loaded continuous model identity/features differ from bundle.")
+    indicators = _require_mapping(descriptor.get("fitted_state_indicators"), field="descriptor.fitted_state_indicators")
+    if descriptor.get("step_names") != ["preprocess", "model"] or descriptor.get("feature_order") != features or descriptor.get("preprocessing_contract") != bundle.get("preprocessing_contract") or indicators.get("n_features_in_") != len(features):
+        raise InferenceContractError("Continuous fitted-state descriptor differs.")
+    params = model.get_params(deep=False)
+    expected_params = dict(_require_mapping(contract.get("fixed_constructor_parameters"), field="model_contract.fixed_constructor_parameters"))
+    for key, expected in _require_mapping(contract.get("selected_hyperparameters"), field="model_contract.selected_hyperparameters").items():
+        expected_params[str(key).removeprefix("model__")] = expected
+    for key, expected in expected_params.items():
+        if params.get(key) != expected:
+            raise InferenceContractError(f"Continuous model parameter differs for {key}.")
+    if manifest is not None:
+        artifact = _require_mapping(manifest.get("model_artifact"), field="manifest.model_artifact")
+        if artifact.get("state_descriptor") != dict(descriptor) or artifact.get("state_fingerprint") != bundle.get("model_state_fingerprint"):
+            raise InferenceContractError("Continuous manifest fitted state differs.")
+
+
+def predict_continuous_batch(pipeline: Pipeline, value: Mapping[str, Any] | pd.Series | pd.DataFrame, *, bundle: Mapping[str, Any], runtime_report: RuntimeCompatibilityReport | None = None) -> pd.Series:
+    """Make exactly one continuous predict call for a validated batch."""
+    if runtime_report is not None and not runtime_report.compatible:
+        raise RuntimeCompatibilityError("Runtime is not compatible for prediction.", report=runtime_report)
+    validate_continuous_loaded_pipeline_contract(pipeline, bundle=bundle)
+    frame = normalize_continuous_inference_input(value, bundle=bundle)
+    raw = np.asarray(pipeline.predict(frame))
+    if raw.ndim == 2 and raw.shape[1] == 1:
+        raw = raw[:, 0]
+    if raw.ndim != 1 or len(raw) != len(frame):
+        raise InferenceContractError("Continuous prediction shape must be one value per row.")
+    try:
+        values = raw.astype(float)
+    except (TypeError, ValueError) as exc:
+        raise InferenceContractError("Continuous predictions must be numeric.") from exc
+    if not np.isfinite(values).all():
+        raise InferenceContractError("Continuous predictions must be finite.")
+    return pd.Series(values, index=frame.index.copy(), name="prediction")
+
+
+def continuous_output_to_frame(output: pd.Series, *, bundle: Mapping[str, Any], identifier_name: str = "example_id") -> pd.DataFrame:
+    """Present identifiers, predictions, and the contract-derived unit."""
+    _, unit = _validate_continuous_contract(bundle)
+    return pd.DataFrame({identifier_name: output.index.copy(), "prediction": output.to_numpy(copy=True), "unit": unit})
 
 
 def resolve_positive_probability_column(
@@ -1670,12 +1845,18 @@ __all__ = [
     "validate_runtime_compatibility",
     "validate_inference_readiness",
     "validate_multiclass_inference_readiness",
+    "validate_continuous_inference_readiness",
     "validate_bundle_handoff_alignment",
     "validate_multiclass_bundle_handoff_alignment",
+    "validate_continuous_bundle_handoff_alignment",
     "validate_model_artifact_before_load",
     "load_validated_inference_pipeline",
     "validate_loaded_pipeline_contract",
     "validate_multiclass_loaded_pipeline_contract",
+    "validate_continuous_loaded_pipeline_contract",
+    "normalize_continuous_inference_input",
+    "predict_continuous_batch",
+    "continuous_output_to_frame",
     "normalize_inference_input",
     "apply_declared_missing_value_policy",
     "report_unknown_input_categories",

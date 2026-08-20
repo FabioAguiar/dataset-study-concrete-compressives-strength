@@ -680,6 +680,6 @@ def test_notebook_05_is_clean_and_respects_inference_boundary() -> None:
         "positive_class_probability",
     )
     assert not any(token in code for token in prohibited)
-    assert "predict_multiclass" in code
-    assert "predict_multiclass_batch" in code
+    assert "predict_continuous_batch" in code
+    assert "predict_multiclass" not in code
     assert "trusted_source=True" in code
