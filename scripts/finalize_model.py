@@ -1890,9 +1890,28 @@ def freeze_regression_finalization_decisions(*, handoff: Mapping[str, Any],
         "do_not_change_hyperparameters": True, "do_not_change_preprocessing": True}
     if any(policy.get(k) != v for k, v in required_policy.items()):
         raise FinalizationContractError("Final-training policy is incomplete or divergent.")
+    required = ("dataset_slug", "selected_model_id", "selected_model_family",
+                "selected_hyperparameters", "selected_estimator_fixed_constructor_parameters",
+                "selected_feature_policy", "selected_feature_columns",
+                "selected_preprocessing_contract", "target_contract")
+    if any(key not in handoff or handoff[key] in (None, "", [], {}) for key in required):
+        raise FinalizationContractError("Model-selection winner contract is incomplete.")
+    if handoff.get("problem_type") != "continuous_regression":
+        raise FinalizationContractError("Continuous finalization requires continuous_regression.")
+    readiness = handoff.get("readiness", {})
+    if (handoff.get("test_partition_sealed") is not True
+            or handoff.get("test_partition_evaluated") is not False
+            or readiness.get("final_model_training_ready") is not True
+            or readiness.get("final_model_trained") is not False
+            or readiness.get("model_artifact_materialized") is not False
+            or readiness.get("model_bundle_materialized") is not False):
+        raise FinalizationContractError("Upstream readiness does not permit finalization.")
     data = {
         "dataset_slug": handoff["dataset_slug"], "problem_type": "continuous_regression",
-        "model_selection_handoff": {"path": handoff_path, "sha256": handoff_sha256},
+        "model_selection_handoff": {"path": handoff_path, "schema_version": handoff["schema_version"],
+                                    "sha256": handoff_sha256},
+        "preparation_lineage": {"handoff": handoff["preparation_handoff_reference"],
+                                "artifact_hashes": handoff["preparation_artifact_hashes"]},
         "selected_model_id": handoff["selected_model_id"], "selected_model_family": handoff["selected_model_family"],
         "selected_hyperparameters": handoff["selected_hyperparameters"],
         "selected_estimator_fixed_constructor_parameters": handoff["selected_estimator_fixed_constructor_parameters"],
@@ -1900,6 +1919,8 @@ def freeze_regression_finalization_decisions(*, handoff: Mapping[str, Any],
         "feature_policy": handoff["selected_feature_policy"], "feature_order": handoff["selected_feature_columns"],
         "preprocessing": handoff["selected_preprocessing_contract"], "target_contract": handoff["target_contract"],
         "training_partitions": ["train", "validation"],
+        "training_row_counts": {"train": split["row_counts"]["train"],
+                                "validation": split["row_counts"]["validation"]},
         "training_row_count": split["row_counts"]["train"] + split["row_counts"]["validation"],
         "evaluation_partition": "test", "test_reference": preparation.sealed_test_integrity_reference,
         "test_access_rule": "only_after_final_fit_and_verified_checkpoint", "evaluate_once": True,
@@ -1928,7 +1949,13 @@ def reconstruct_regression_selected_pipeline(contract: RegressionFrozenFinalizat
         selected[plain] = value
     estimator.set_params(**selected)
     prep = data["preprocessing"]; features = data["feature_order"]
+    if prep.get("type") != "Pipeline" or prep.get("categorical_features") not in ([], None):
+        raise FinalizationContractError("Unsupported regression preprocessing contract.")
     numerical = prep.get("numerical_features", features)
+    if numerical != features:
+        raise FinalizationContractError("Preprocessing numerical feature order differs.")
+    if prep.get("scale_numerical") is True and prep.get("scaler") not in ("StandardScaler", None):
+        raise FinalizationContractError("Unsupported numerical scaler.")
     transformer = StandardScaler() if prep.get("scale_numerical") else "passthrough"
     preprocess = ColumnTransformer([("numerical", transformer, numerical)], remainder="drop", sparse_threshold=0.0)
     pipeline = Pipeline([("preprocess", preprocess), ("model", estimator)])
@@ -1938,11 +1965,53 @@ def reconstruct_regression_selected_pipeline(contract: RegressionFrozenFinalizat
 
 def assemble_regression_final_training_data(*, train: pd.DataFrame, validation: pd.DataFrame,
         feature_columns: Sequence[str], target_column: str) -> tuple[pd.DataFrame, pd.Series]:
+    expected = list(feature_columns) + [target_column]
+    for name, frame in (("train", train), ("validation", validation)):
+        if list(frame.columns) != expected:
+            raise FinalizationContractError(f"{name} schema or feature order differs.")
     combined = pd.concat([train.copy(deep=True), validation.copy(deep=True)], ignore_index=True)
     y = combined[target_column]
     if not pd.api.types.is_numeric_dtype(y) or y.isna().any() or not np.isfinite(y.to_numpy(float)).all():
         raise FinalizationContractError("Final regression target must be complete, numeric, and finite.")
     return combined.loc[:, list(feature_columns)].copy(deep=True), y.copy(deep=True)
+
+
+def describe_regression_fitted_pipeline(*, pipeline: Pipeline,
+        contract: RegressionFrozenFinalizationContract | Mapping[str, Any]) -> dict[str, Any]:
+    """Build a byte-independent, recomputable fitted-state descriptor."""
+    data = contract.as_dict() if isinstance(contract, RegressionFrozenFinalizationContract) else _deepcopy(contract)
+    if not isinstance(pipeline, Pipeline) or not _is_fitted(pipeline):
+        raise SerializationValidationError("Regression pipeline is not fitted.")
+    preprocess = pipeline.named_steps.get("preprocess"); model = pipeline.named_steps.get("model")
+    try:
+        transformed = [str(value) for value in preprocess.get_feature_names_out()]
+    except Exception as exc:
+        raise SerializationValidationError("Cannot derive transformed regression feature names.") from exc
+    indicators: dict[str, Any] = {}
+    for name in ("n_features_in_", "feature_names_in_", "n_iter_", "n_trees_per_iteration_",
+                 "train_score_", "validation_score_", "coef_", "intercept_", "tree_",
+                 "estimators_", "is_categorical_", "n_features_in_"):
+        if hasattr(model, name):
+            value = getattr(model, name)
+            if name in ("estimators_", "tree_"):
+                value = len(value) if hasattr(value, "__len__") else value.__class__.__name__
+            indicators[name] = _jsonable(value)
+    return {
+        "pipeline_class": pipeline.__class__.__name__,
+        "step_names": list(pipeline.named_steps),
+        "preprocessor_class": preprocess.__class__.__name__,
+        "model_class": model.__class__.__name__,
+        "selected_hyperparameters": data["selected_hyperparameters"],
+        "fixed_constructor_parameters": data["selected_estimator_fixed_constructor_parameters"],
+        "feature_order": data["feature_order"],
+        "preprocessing_contract": data["preprocessing"],
+        "transformed_feature_names": transformed,
+        "fitted_state_indicators": indicators,
+    }
+
+
+def compute_regression_model_state_fingerprint(descriptor: Mapping[str, Any]) -> str:
+    return semantic_fingerprint(descriptor)
 
 
 def _regression_model_params(bundle: Mapping[str, Any]) -> dict[str, Any]:
@@ -1961,23 +2030,70 @@ def _validate_regression_complete_set(directory: Path) -> tuple[dict[str, Any], 
     manifest=payloads["final-model-manifest.json"]; evidence=payloads["final-test-evidence.json"]
     bundle=payloads["inference-bundle.json"]; handoff=payloads["final-model-handoff.json"]
     model_path=directory/"final-pipeline.joblib"; model_sha=sha256_file(model_path)
-    if any(p.get("dataset_slug") != manifest.get("dataset_slug") for p in (evidence,bundle,handoff)):
-        raise FinalizationContractError("Continuous final artifacts disagree on dataset_slug.")
-    if model_sha != bundle.get("model_artifact_sha256") or model_sha != manifest.get("model_artifact",{}).get("byte_sha256"):
+    common_fields = ("dataset_slug", "problem_type", "selected_model_id", "selected_model_family",
+                     "feature_order", "target_contract", "preprocessing_contract",
+                     "frozen_finalization_contract_fingerprint")
+    for field in common_fields:
+        expected = manifest.get(field)
+        for payload in (evidence, bundle, handoff):
+            if payload.get(field) != expected:
+                raise FinalizationContractError(f"Continuous final artifacts disagree on {field}.")
+    if manifest.get("problem_type") != "continuous_regression":
+        raise FinalizationContractError("Final artifacts are not continuous regression.")
+    contract = manifest.get("frozen_finalization_contract", {})
+    if semantic_fingerprint(contract) != manifest.get("frozen_finalization_contract_fingerprint"):
+        raise FinalizationContractError("Frozen finalization fingerprint mismatch.")
+    selection_ref = manifest.get("model_selection_handoff_reference")
+    if any(payload.get("model_selection_handoff_reference") != selection_ref for payload in (evidence,bundle,handoff)):
+        raise FinalizationContractError("Model-selection lineage differs across final artifacts.")
+    for field in ("selected_hyperparameters", "selected_estimator_fixed_constructor_parameters"):
+        if manifest.get(field) != bundle.get("model_contract", {}).get(
+                "selected_hyperparameters" if field == "selected_hyperparameters" else "fixed_constructor_parameters"):
+            raise FinalizationContractError(f"Model contract differs for {field}.")
+    if (model_sha != bundle.get("model_artifact_sha256")
+            or model_sha != manifest.get("model_artifact",{}).get("byte_sha256")
+            or model_sha != handoff.get("model_artifact_reference", {}).get("sha256")):
         raise UntrustedArtifactError("Continuous final model SHA mismatch.")
+    state = manifest.get("model_artifact", {}).get("state_fingerprint")
+    descriptor = manifest.get("model_artifact", {}).get("state_descriptor")
+    if (not descriptor or compute_regression_model_state_fingerprint(descriptor) != state
+            or bundle.get("model_state_fingerprint") != state
+            or bundle.get("model_state_descriptor") != descriptor
+            or handoff.get("model_artifact_reference", {}).get("state_fingerprint") != state):
+        raise FinalizationContractError("Continuous model-state fingerprint mismatch.")
     refs=handoff.get("sibling_references",{})
     for name in ("final-model-manifest.json","final-test-evidence.json","inference-bundle.json"):
         if refs.get(name,{}).get("sha256") != sha256_file(directory/name):
             raise FinalizationContractError(f"Final handoff sibling hash mismatch: {name}")
     if evidence.get("test_prediction_call_count") != 1 or evidence.get("test_partition_evaluation_count") != 1 or evidence.get("no_post_test_adjustment") is not True:
         raise FinalizationContractError("One-time test evidence is invalid.")
+    if (manifest.get("training_row_count") != handoff.get("training_row_count")
+            or evidence.get("partition_reference") != manifest.get("test_reference")
+            or evidence.get("metric_contract") != handoff.get("metric_contract")
+            or evidence.get("metrics") != handoff.get("final_test_metrics")
+            or evidence.get("validation_to_test_deltas") != handoff.get("validation_to_test_deltas")
+            or handoff.get("test_partition_evaluation_count") != 1):
+        raise FinalizationContractError("Training/test evidence differs across final artifacts.")
+    readiness = handoff.get("readiness", {})
+    required_true = ("model_selection_handoff_validated", "selected_candidate_reconstructed",
+                     "frozen_finalization_contract_validated", "final_training_completed",
+                     "final_model_trained", "test_partition_opened_after_final_fit",
+                     "final_test_evaluation_completed", "test_partition_evaluated",
+                     "no_model_selection_decision_changed_after_test",
+                     "final_model_artifact_materialized", "inference_bundle_materialized",
+                     "inference_demo_ready")
+    if (any(readiness.get(k) is not True for k in required_true)
+            or readiness.get("operational_modeling_ready") is not False
+            or readiness.get("operational_validity") != "unconfirmed"):
+        raise FinalizationContractError("Final readiness contract is invalid.")
     return handoff,bundle,manifest,evidence
 
 
-def _write_regression_final_artifacts(*, output: Path, pipeline: Pipeline, payloads: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+def _write_regression_final_artifacts(*, output: Path, staged_model: Path,
+        payloads: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
     staging=Path(tempfile.mkdtemp(prefix="regression-final-")); promoted=[]
     try:
-        joblib.dump(pipeline, staging/"final-pipeline.joblib")
+        shutil.copyfile(staged_model, staging/"final-pipeline.joblib")
         for name,payload in payloads.items(): (staging/name).write_bytes(canonical_json_bytes(payload)+b"\n")
         output.mkdir(parents=True,exist_ok=True)
         if any((output/n).exists() for n in FINAL_ARTIFACT_FILENAMES):
@@ -1994,15 +2110,27 @@ def _write_regression_final_artifacts(*, output: Path, pipeline: Pipeline, paylo
 
 def run_regression_finalization(*, project_root: str|Path, model_selection_handoff_path: str|Path,
         output_directory: str|Path) -> dict[str, Any]:
-    root=Path(project_root).resolve(); out=(root/_require_relative_path(output_directory,field="output_directory")).resolve()
+    root=Path(project_root).resolve(); output_rel=str(_require_relative_path(output_directory,field="output_directory"))
+    out=(root/output_rel).resolve(); receipt=out/".final-evaluation-state.json"
     present=[(out/n).exists() for n in FINAL_ARTIFACT_FILENAMES]
     if any(present):
         if not all(present): raise ArtifactConflictError("Regression final artifact set is partial.")
         handoff,bundle,manifest,evidence=_validate_regression_complete_set(out)
+        requested=str(_require_relative_path(model_selection_handoff_path,field="model_selection_handoff_path"))
+        upstream=manifest.get("model_selection_handoff_reference", {})
+        if (upstream.get("path") != requested or not (root/requested).is_file()
+                or sha256_file(root/requested) != upstream.get("sha256")):
+            raise ArtifactConflictError("Existing final set is divergent from the requested model-selection handoff.")
+        load_and_validate_model_selection_handoff(project_root=root,handoff_path=requested)
         load_trusted_pipeline_from_bundle(project_root=root,bundle=bundle)
         return {"status":"reused_equivalent","final_fit_count":0,"test_parse_count":0,"test_predict_count":0,
             "test_evaluation_count":evidence["test_partition_evaluation_count"],"metrics":evidence["metrics"],
             "contract_fingerprint":manifest["frozen_finalization_contract_fingerprint"]}
+    if receipt.is_file():
+        state=_load_json(receipt)
+        if state.get("state") == "evaluation_started":
+            raise DuplicateTestEvaluationError("A prior test evaluation started without a complete artifact set.")
+        raise ArtifactConflictError("Finalization receipt exists without complete final artifacts.")
     selection=load_and_validate_model_selection_handoff(project_root=root,handoff_path=model_selection_handoff_path)
     selection_rel=str(_require_relative_path(model_selection_handoff_path,field="model_selection_handoff_path"))
     prep_ref=selection["preparation_handoff_reference"]
@@ -2012,82 +2140,103 @@ def run_regression_finalization(*, project_root: str|Path, model_selection_hando
     data=contract.as_dict(); features=data["feature_order"]; target=data["target_contract"]["column"]
     x,y=assemble_regression_final_training_data(train=preparation.train,validation=preparation.validation,
         feature_columns=features,target_column=target)
+    if len(x) != data["training_row_count"]:
+        raise FinalizationContractError("Final training row count differs from frozen contract.")
     pipeline=reconstruct_regression_selected_pipeline(contract); pipeline.fit(x,y)
     if not _is_fitted(pipeline): raise SerializationValidationError("Regression pipeline did not become fitted.")
-    checkpoint=Path(tempfile.mkdtemp(prefix="regression-checkpoint-"))/"pipeline.joblib"
+    checkpoint_dir=Path(tempfile.mkdtemp(prefix="regression-checkpoint-")); checkpoint=checkpoint_dir/"pipeline.joblib"
     try:
+        # This is the sole serialization; these exact bytes are later promoted.
         joblib.dump(pipeline,checkpoint); checkpoint_sha=sha256_file(checkpoint)
         trusted=joblib.load(checkpoint)
         if not _is_fitted(trusted): raise SerializationValidationError("Staging reload is not fitted.")
-        smoke=np.asarray(trusted.predict(x.iloc[:3].copy()),dtype=float)
-        if smoke.shape != (3,) or not np.isfinite(smoke).all(): raise SerializationValidationError("Training smoke failed.")
-    finally: shutil.rmtree(checkpoint.parent,ignore_errors=True)
-    test_ref=data["test_reference"]; test_path=root/_require_relative_path(test_ref["path"],field="test.path")
-    if sha256_file(test_path) != test_ref["sha256"]: raise TestAccessError("Sealed test SHA mismatch.")
-    test=pd.read_csv(test_path)
-    predictions=np.asarray(pipeline.predict(test.loc[:,features].copy()),dtype=float)
-    metrics=compute_regression_metrics(test[target].to_numpy(float),predictions)
-    validation=selection["selected_validation_evidence"]
-    deltas={f"test_{m}_minus_validation_{m}":metrics[m]-validation[m] for m in ("mae","rmse","r2","medae")}
-    model_state=checkpoint_sha; relative_output=str(_require_relative_path(output_directory,field="output_directory"))
-    model_rel=f"{relative_output}/final-pipeline.joblib"
-    common={"dataset_slug":selection["dataset_slug"],"problem_type":"continuous_regression",
-        "selected_model_id":selection["selected_model_id"],"selected_model_family":selection["selected_model_family"],
-        "feature_order":features,"target_contract":selection["target_contract"]}
-    manifest={**common,"schema_version":"final-model-manifest.v3","artifact_type":"final_model_manifest",
-        "model_selection_handoff_reference":{"path":selection_rel,"sha256":sha256_file(root/selection_rel)},
-        "frozen_finalization_contract":data,"frozen_finalization_contract_fingerprint":contract.fingerprint,
-        "selected_hyperparameters":data["selected_hyperparameters"],
-        "selected_estimator_fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],
-        "preprocessing_contract":data["preprocessing"],"training_partitions":["train","validation"],
-        "training_row_count":len(x),"evaluation_partition":"test","test_reference":test_ref,
-        "final_fit_count":1,"test_evaluation_count":1,
-        "model_artifact":{"path":model_rel,"byte_sha256":checkpoint_sha,"state_fingerprint":model_state},
-        "runtime_versions":{"python":platform.python_version(),"scikit_learn":sklearn.__version__,"pandas":pd.__version__},
-        "operational_validity":"unconfirmed","operational_modeling_ready":False}
-    evidence={**common,"schema_version":"final-test-evidence.v3","artifact_type":"final_test_evidence",
-        "partition":"test","partition_reference":test_ref,"row_count":len(test),
-        "metric_contract":{"primary":"mae","unit":selection["target_contract"]["unit"]},"metrics":metrics,
-        "validation_to_test_deltas":deltas,"test_loaded_only_after_final_fit":True,
-        "test_prediction_call_count":1,"test_partition_evaluation_count":1,
-        "test_used_for_model_selection":False,"test_used_for_hyperparameter_selection":False,
-        "test_used_for_feature_selection":False,"test_used_for_preprocessing_selection":False,
-        "no_post_test_adjustment":True}
-    bundle={**common,"schema_version":"inference-bundle.v3","artifact_type":"inference_bundle",
-        "model_artifact_path":model_rel,"model_artifact_sha256":checkpoint_sha,"model_state_fingerprint":model_state,
-        "input_feature_dtypes":{c:str(x[c].dtype) for c in features},"identifier_exclusions":[],
-        "missing_value_policy":"pipeline_contract","preprocessing_contract":data["preprocessing"],
-        "model_contract":{"family":selection["selected_model_family"],"fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],"selected_hyperparameters":data["selected_hyperparameters"]},
-        "prediction_contract":{"type":"continuous_numeric","scale":"original_target_scale","unit":selection["target_contract"]["unit"]},
-        "lineage":{"model_selection":selection_rel,"preparation":prep_ref["path"],"finalization_contract_fingerprint":contract.fingerprint},
-        "runtime_compatibility":{"scikit_learn":sklearn.__version__},"security_note":"Load joblib only after exact SHA-256 verification.",
-        "readiness":{"inference_demo_ready":True,"operational_modeling_ready":False,"operational_validity":"unconfirmed"}}
-    # Materialize model once to obtain its exact final byte digest before JSON references.
-    temp=Path(tempfile.mkdtemp(prefix="regression-model-digest-"))/"m.joblib"
-    try: joblib.dump(pipeline,temp); final_sha=sha256_file(temp)
-    finally: shutil.rmtree(temp.parent,ignore_errors=True)
-    for obj in (manifest,bundle):
-        if obj is manifest: obj["model_artifact"]["byte_sha256"]=final_sha; obj["model_artifact"]["state_fingerprint"]=final_sha
-        else: obj["model_artifact_sha256"]=final_sha; obj["model_state_fingerprint"]=final_sha
-    staging_payloads={"final-model-manifest.json":manifest,"final-test-evidence.json":evidence,"inference-bundle.json":bundle}
-    # Handoff sibling hashes are over canonical bytes exactly as written.
-    siblings={n:{"path":f"{relative_output}/{n}","sha256":sha256_bytes(canonical_json_bytes(p)+b"\n")}
-        for n,p in staging_payloads.items()}
-    final_handoff={**common,"schema_version":"final-model-handoff.v3","artifact_type":"final_model_handoff",
-        "model_selection_handoff_reference":{"path":selection_rel,"sha256":sha256_file(root/selection_rel)},
-        "model_artifact_reference":{"path":model_rel,"sha256":final_sha,"state_fingerprint":final_sha},
-        "sibling_references":siblings,"final_test_metrics":metrics,"validation_to_test_deltas":deltas,
-        "training_partitions":["train","validation"],"training_row_count":len(x),"evaluation_partition":"test",
-        "test_partition_evaluation_count":1,"readiness":{"final_model_trained":True,"final_fit_count":1,
-        "test_partition_opened_after_final_fit":True,"final_test_evaluation_completed":True,
-        "test_partition_evaluated":True,"test_prediction_call_count":1,"no_model_selection_decision_changed_after_test":True,
-        "final_model_artifact_materialized":True,"inference_bundle_materialized":True,"inference_demo_ready":True,
-        "operational_modeling_ready":False,"operational_validity":"unconfirmed"}}
-    staging_payloads["final-model-handoff.json"]=final_handoff
-    result=_write_regression_final_artifacts(output=out,pipeline=pipeline,payloads=staging_payloads)
-    return {**result,"final_fit_count":1,"test_parse_count":1,"test_predict_count":1,"test_evaluation_count":1,
-        "metrics":metrics,"validation_to_test_deltas":deltas,"contract_fingerprint":contract.fingerprint,
-        "model_state_fingerprint":final_sha,"staged_joblib_sha256":final_sha,"test_row_count":len(test)}
+        descriptor=describe_regression_fitted_pipeline(pipeline=trusted,contract=contract)
+        model_state=compute_regression_model_state_fingerprint(descriptor)
+        reference_smoke=np.asarray(pipeline.predict(x.iloc[:5].copy()),dtype=float)
+        reload_smoke=np.asarray(trusted.predict(x.iloc[:5].copy()),dtype=float)
+        if not np.allclose(reference_smoke,reload_smoke,rtol=1e-12,atol=1e-12):
+            raise SerializationValidationError("Training-sample serialization roundtrip differs.")
+        test_ref=data["test_reference"]; test_path=root/_require_relative_path(test_ref["path"],field="test.path")
+        if sha256_file(test_path) != test_ref["sha256"]: raise TestAccessError("Sealed test SHA mismatch.")
+        out.mkdir(parents=True,exist_ok=True)
+        receipt.write_bytes(canonical_json_bytes({"schema_version":"final-evaluation-state.v1",
+            "state":"evaluation_started","contract_fingerprint":contract.fingerprint,
+            "test_reference":test_ref})+b"\n")
+        test=pd.read_csv(test_path)
+        if (sha256_file(test_path) != test_ref["sha256"] or len(test) != test_ref["row_count"]
+                or list(test.columns) != features+[target]):
+            raise TestAccessError("Test partition integrity or schema differs after opening.")
+        test_target=test[target]
+        if (not pd.api.types.is_numeric_dtype(test_target) or test_target.isna().any()
+                or not np.isfinite(test_target.to_numpy(float)).all()):
+            raise TestAccessError("Test target must be complete, numeric, and finite.")
+        predictions=np.asarray(trusted.predict(test.loc[:,features].copy()),dtype=float)
+        metrics=compute_regression_metrics(test_target.to_numpy(float),predictions)
+        validation=selection["selected_validation_evidence"]
+        deltas={f"test_{m}_minus_validation_{m}":metrics[m]-validation[m] for m in ("mae","rmse","r2","medae")}
+        selection_ref={"path":selection_rel,"schema_version":selection["schema_version"],
+                       "sha256":sha256_file(root/selection_rel)}
+        model_rel=f"{output_rel}/final-pipeline.joblib"; metric_contract={"primary":"mae","direction":"lower_is_better","unit":selection["target_contract"]["unit"],"metrics":["mae","rmse","r2","medae"]}
+        common={"dataset_slug":selection["dataset_slug"],"problem_type":"continuous_regression",
+            "model_selection_handoff_reference":selection_ref,
+            "selected_model_id":selection["selected_model_id"],"selected_model_family":selection["selected_model_family"],
+            "feature_order":features,"target_contract":selection["target_contract"],
+            "preprocessing_contract":data["preprocessing"],
+            "frozen_finalization_contract_fingerprint":contract.fingerprint}
+        manifest={**common,"schema_version":"final-model-manifest.v3","artifact_type":"final_model_manifest",
+            "preparation_lineage":data["preparation_lineage"],"frozen_finalization_contract":data,
+            "selected_hyperparameters":data["selected_hyperparameters"],
+            "selected_estimator_fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],
+            "feature_policy":data["feature_policy"],"training_partitions":data["training_partitions"],
+            "training_row_count":len(x),"evaluation_partition":"test","test_reference":test_ref,
+            "final_fit_count":1,"test_evaluation_count":1,
+            "model_artifact":{"path":model_rel,"byte_sha256":checkpoint_sha,"state_fingerprint":model_state,"state_descriptor":descriptor},
+            "runtime_versions":{"python":platform.python_version(),"scikit_learn":sklearn.__version__,"pandas":pd.__version__,"joblib":joblib.__version__},
+            "operational_validity":"unconfirmed","operational_modeling_ready":False}
+        evidence={**common,"schema_version":"final-test-evidence.v3","artifact_type":"final_test_evidence",
+            "partition":"test","partition_reference":test_ref,"row_count":len(test),"metric_contract":metric_contract,"metrics":metrics,
+            "validation_to_test_deltas":deltas,"test_loaded_only_after_final_fit":True,
+            "test_prediction_call_count":1,"test_partition_evaluation_count":1,
+            "test_used_for_model_selection":False,"test_used_for_hyperparameter_selection":False,
+            "test_used_for_feature_selection":False,"test_used_for_preprocessing_selection":False,"no_post_test_adjustment":True}
+        bundle={**common,"schema_version":"inference-bundle.v3","artifact_type":"inference_bundle",
+            "model_artifact_path":model_rel,"model_artifact_sha256":checkpoint_sha,
+            "model_state_fingerprint":model_state,"model_state_descriptor":descriptor,
+            "input_feature_dtypes":{c:{"dtype":str(x[c].dtype),"role":"numerical_feature"} for c in features},
+            "model_contract":{"family":selection["selected_model_family"],"fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],"selected_hyperparameters":data["selected_hyperparameters"]},
+            "prediction_contract":{"type":"continuous_numeric","scale":"original_target_scale","unit":selection["target_contract"]["unit"]},
+            "lineage":{"model_selection":selection_ref,"preparation":data["preparation_lineage"]},
+            "runtime_compatibility":{"python":platform.python_version(),"scikit_learn":sklearn.__version__},
+            "security_note":"Load joblib only after exact SHA-256 verification.",
+            "readiness":{"inference_demo_ready":True,"operational_modeling_ready":False,"operational_validity":"unconfirmed"}}
+        payloads={"final-model-manifest.json":manifest,"final-test-evidence.json":evidence,"inference-bundle.json":bundle}
+        siblings={n:{"path":f"{output_rel}/{n}","sha256":sha256_bytes(canonical_json_bytes(p)+b"\n")} for n,p in payloads.items()}
+        readiness={k:True for k in ("model_selection_handoff_validated","selected_candidate_reconstructed",
+            "frozen_finalization_contract_validated","final_training_completed","final_model_trained",
+            "test_partition_opened_after_final_fit","final_test_evaluation_completed","test_partition_evaluated",
+            "no_model_selection_decision_changed_after_test","final_model_artifact_materialized",
+            "inference_bundle_materialized","inference_demo_ready")}
+        readiness.update({"final_fit_count":1,"test_partition_evaluation_count":1,"test_prediction_call_count":1,
+            "test_partition_used_for_adjustment":False,"operational_modeling_ready":False,"operational_validity":"unconfirmed"})
+        payloads["final-model-handoff.json"]={**common,"schema_version":"final-model-handoff.v3","artifact_type":"final_model_handoff",
+            "selected_hyperparameters":data["selected_hyperparameters"],
+            "selected_estimator_fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],
+            "model_artifact_reference":{"path":model_rel,"sha256":checkpoint_sha,"state_fingerprint":model_state},
+            "bundle_reference":siblings["inference-bundle.json"],"manifest_reference":siblings["final-model-manifest.json"],
+            "test_evidence_reference":siblings["final-test-evidence.json"],"sibling_references":siblings,
+            "prediction_contract":bundle["prediction_contract"],"metric_contract":metric_contract,
+            "final_test_metrics":metrics,"validation_to_test_deltas":deltas,
+            "training_partitions":data["training_partitions"],"training_row_count":len(x),"evaluation_partition":"test",
+            "test_partition_evaluation_count":1,"readiness":readiness}
+        result=_write_regression_final_artifacts(output=out,staged_model=checkpoint,payloads=payloads)
+        receipt.write_bytes(canonical_json_bytes({"schema_version":"final-evaluation-state.v1","state":"complete",
+            "contract_fingerprint":contract.fingerprint,"test_partition_evaluation_count":1})+b"\n")
+        return {**result,"final_fit_count":1,"test_parse_count":1,"test_predict_count":1,"test_evaluation_count":1,
+            "metrics":metrics,"validation_to_test_deltas":deltas,"contract_fingerprint":contract.fingerprint,
+            "model_state_fingerprint":model_state,"model_state_descriptor":descriptor,
+            "staged_joblib_sha256":checkpoint_sha,"roundtrip_verified":True,"test_row_count":len(test)}
+    finally:
+        shutil.rmtree(checkpoint_dir,ignore_errors=True)
 
 
 _load_bundle_v1_v2 = load_and_validate_inference_bundle
@@ -2130,6 +2279,13 @@ def load_trusted_pipeline_from_bundle(*, project_root: str|Path, bundle: Mapping
         raise SerializationValidationError("Trusted regression pipeline contract mismatch.")
     params=loaded.named_steps["model"].get_params(deep=False)
     if any(params.get(k)!=v for k,v in _regression_model_params(bundle).items()): raise SerializationValidationError("Regression model parameters differ.")
+    descriptor=describe_regression_fitted_pipeline(pipeline=loaded,contract={
+        "selected_hyperparameters":bundle["model_contract"]["selected_hyperparameters"],
+        "selected_estimator_fixed_constructor_parameters":bundle["model_contract"]["fixed_constructor_parameters"],
+        "feature_order":bundle["feature_order"],"preprocessing":bundle["preprocessing_contract"]})
+    if (descriptor != bundle.get("model_state_descriptor")
+            or compute_regression_model_state_fingerprint(descriptor) != bundle.get("model_state_fingerprint")):
+        raise SerializationValidationError("Regression fitted-state descriptor or fingerprint differs.")
     return loaded
 
 
@@ -4130,4 +4286,11 @@ def load_trusted_pipeline_from_bundle(*, project_root, bundle):
     if not _is_fitted(loaded) or loaded.named_steps["model"].__class__.__name__ != bundle["model_contract"]["family"]: raise SerializationValidationError("Trusted regression pipeline contract mismatch.")
     params=loaded.named_steps["model"].get_params(deep=False)
     if any(params.get(k)!=v for k,v in _regression_model_params(bundle).items()): raise SerializationValidationError("Regression model parameters differ.")
+    descriptor=describe_regression_fitted_pipeline(pipeline=loaded,contract={
+        "selected_hyperparameters":bundle["model_contract"]["selected_hyperparameters"],
+        "selected_estimator_fixed_constructor_parameters":bundle["model_contract"]["fixed_constructor_parameters"],
+        "feature_order":bundle["feature_order"],"preprocessing":bundle["preprocessing_contract"]})
+    if (descriptor != bundle.get("model_state_descriptor")
+            or compute_regression_model_state_fingerprint(descriptor) != bundle.get("model_state_fingerprint")):
+        raise SerializationValidationError("Regression fitted-state descriptor or fingerprint differs.")
     return loaded

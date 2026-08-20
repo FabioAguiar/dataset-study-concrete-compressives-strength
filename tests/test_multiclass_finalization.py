@@ -754,7 +754,9 @@ def test_handoff_builder_preserves_shape_factor2_and_no_post_test_change(
 
 def test_notebook_04_is_clean_and_multiclass_only():
     root = Path(__file__).resolve().parents[1]
-    path = root / "notebooks/04_final_model_and_bundle.ipynb"
+    # The official Notebook 04 now implements continuous regression.  Keep the
+    # legacy multiclass source guard attached to its pedagogical reference.
+    path = root / "notebooks/04_final_model_and_bundle_reference.ipynb"
     notebook = json.loads(path.read_text())
     code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
     text = "\n".join("".join(cell.get("source", [])) for cell in code_cells).lower()
