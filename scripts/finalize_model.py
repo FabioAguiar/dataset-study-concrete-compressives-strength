@@ -1855,7 +1855,7 @@ from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 from scripts.prepare_data import load_and_validate_preparation_for_model_selection
-from scripts.select_models import compute_regression_metrics
+from scripts.select_models import analyze_regression_group_overlap_sensitivity, compute_regression_metrics
 
 
 REGRESSION_FINAL_SCHEMAS: Mapping[str, tuple[str, str]] = {
@@ -2020,6 +2020,26 @@ def _regression_model_params(bundle: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+def regression_effective_estimator_parameters(contract: RegressionFrozenFinalizationContract | Mapping[str, Any]) -> dict[str, Any]:
+    """Return the estimator parameters in force after selected overrides.
+
+    ``selected_estimator_fixed_constructor_parameters`` records the base
+    constructor of the searched family (grid defaults included); the selected
+    hyperparameters override some of those entries. This mapping is the
+    effective result that the fitted estimator must report.
+    """
+    data = contract.as_dict() if isinstance(contract, RegressionFrozenFinalizationContract) else dict(contract)
+    result = dict(data["selected_estimator_fixed_constructor_parameters"])
+    result.update({k.removeprefix("model__"): v for k, v in data["selected_hyperparameters"].items()})
+    return result
+
+
+def regression_runtime_versions() -> dict[str, str]:
+    """Return the runtime components whose versions affect model deserialization."""
+    return {"python": platform.python_version(), "scikit_learn": sklearn.__version__,
+            "pandas": pd.__version__, "joblib": joblib.__version__, "numpy": np.__version__}
+
+
 def _validate_regression_complete_set(directory: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     if not all((directory / n).is_file() for n in FINAL_ARTIFACT_FILENAMES):
         raise ArtifactConflictError("Regression final artifact set is partial.")
@@ -2050,6 +2070,12 @@ def _validate_regression_complete_set(directory: Path) -> tuple[dict[str, Any], 
         if manifest.get(field) != bundle.get("model_contract", {}).get(
                 "selected_hyperparameters" if field == "selected_hyperparameters" else "fixed_constructor_parameters"):
             raise FinalizationContractError(f"Model contract differs for {field}.")
+    effective = _regression_model_params(bundle)
+    if (manifest.get("selected_estimator_effective_parameters") != effective
+            or bundle.get("model_contract", {}).get("effective_parameters") != effective):
+        raise FinalizationContractError("Effective estimator parameters differ from fixed plus selected parameters.")
+    if manifest.get("runtime_versions") != bundle.get("runtime_compatibility"):
+        raise FinalizationContractError("Runtime evidence differs between manifest and bundle.")
     if (model_sha != bundle.get("model_artifact_sha256")
             or model_sha != manifest.get("model_artifact",{}).get("byte_sha256")
             or model_sha != handoff.get("model_artifact_reference", {}).get("sha256")):
@@ -2068,7 +2094,8 @@ def _validate_regression_complete_set(directory: Path) -> tuple[dict[str, Any], 
     if evidence.get("test_prediction_call_count") != 1 or evidence.get("test_partition_evaluation_count") != 1 or evidence.get("no_post_test_adjustment") is not True:
         raise FinalizationContractError("One-time test evidence is invalid.")
     if (manifest.get("training_row_count") != handoff.get("training_row_count")
-            or evidence.get("partition_reference") != manifest.get("test_reference")
+            or evidence.get("frozen_partition_reference") != manifest.get("frozen_test_reference")
+            or evidence.get("partition_state") != {"sealed_until_final_fit": True, "evaluated": True, "evaluation_count": 1}
             or evidence.get("metric_contract") != handoff.get("metric_contract")
             or evidence.get("metrics") != handoff.get("final_test_metrics")
             or evidence.get("validation_to_test_deltas") != handoff.get("validation_to_test_deltas")
@@ -2150,6 +2177,10 @@ def run_regression_finalization(*, project_root: str|Path, model_selection_hando
         joblib.dump(pipeline,checkpoint); checkpoint_sha=sha256_file(checkpoint)
         trusted=joblib.load(checkpoint)
         if not _is_fitted(trusted): raise SerializationValidationError("Staging reload is not fitted.")
+        effective=regression_effective_estimator_parameters(contract)
+        fitted_params=trusted.named_steps["model"].get_params(deep=False)
+        if any(fitted_params.get(k) != v for k,v in effective.items()):
+            raise SerializationValidationError("Fitted estimator parameters differ from the frozen contract.")
         descriptor=describe_regression_fitted_pipeline(pipeline=trusted,contract=contract)
         model_state=compute_regression_model_state_fingerprint(descriptor)
         reference_smoke=np.asarray(pipeline.predict(x.iloc[:5].copy()),dtype=float)
@@ -2172,6 +2203,13 @@ def run_regression_finalization(*, project_root: str|Path, model_selection_hando
             raise TestAccessError("Test target must be complete, numeric, and finite.")
         predictions=np.asarray(trusted.predict(test.loc[:,features].copy()),dtype=float)
         metrics=compute_regression_metrics(test_target.to_numpy(float),predictions)
+        # Descriptive only: derived from the single test prediction above, after
+        # every decision is frozen; it cannot feed selection, tuning, or refit.
+        declared=selection.get("evaluation_diagnostics") or {}
+        group_diagnostic=(analyze_regression_group_overlap_sensitivity(reference_features=x,
+            evaluated_features=test.loc[:,features],y_true=test_target.to_numpy(float),predictions=predictions,
+            group_columns=declared["group_overlap_columns"],reference_partitions=data["training_partitions"],
+            evaluated_partition="test") if declared.get("group_overlap_columns") else None)
         validation=selection["selected_validation_evidence"]
         deltas={f"test_{m}_minus_validation_{m}":metrics[m]-validation[m] for m in ("mae","rmse","r2","medae")}
         selection_ref={"path":selection_rel,"schema_version":selection["schema_version"],
@@ -2188,13 +2226,17 @@ def run_regression_finalization(*, project_root: str|Path, model_selection_hando
             "selected_hyperparameters":data["selected_hyperparameters"],
             "selected_estimator_fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],
             "feature_policy":data["feature_policy"],"training_partitions":data["training_partitions"],
-            "training_row_count":len(x),"evaluation_partition":"test","test_reference":test_ref,
+            "selected_estimator_effective_parameters":effective,
+            "training_row_count":len(x),"evaluation_partition":"test","frozen_test_reference":test_ref,
             "final_fit_count":1,"test_evaluation_count":1,
             "model_artifact":{"path":model_rel,"byte_sha256":checkpoint_sha,"state_fingerprint":model_state,"state_descriptor":descriptor},
-            "runtime_versions":{"python":platform.python_version(),"scikit_learn":sklearn.__version__,"pandas":pd.__version__,"joblib":joblib.__version__},
+            "runtime_versions":regression_runtime_versions(),
             "operational_validity":"unconfirmed","operational_modeling_ready":False}
         evidence={**common,"schema_version":"final-test-evidence.v3","artifact_type":"final_test_evidence",
-            "partition":"test","partition_reference":test_ref,"row_count":len(test),"metric_contract":metric_contract,"metrics":metrics,
+            "partition":"test","frozen_partition_reference":test_ref,
+            "partition_state":{"sealed_until_final_fit":True,"evaluated":True,"evaluation_count":1},
+            "row_count":len(test),"metric_contract":metric_contract,"metrics":metrics,
+            "group_overlap_diagnostic":group_diagnostic,
             "validation_to_test_deltas":deltas,"test_loaded_only_after_final_fit":True,
             "test_prediction_call_count":1,"test_partition_evaluation_count":1,
             "test_used_for_model_selection":False,"test_used_for_hyperparameter_selection":False,
@@ -2203,10 +2245,10 @@ def run_regression_finalization(*, project_root: str|Path, model_selection_hando
             "model_artifact_path":model_rel,"model_artifact_sha256":checkpoint_sha,
             "model_state_fingerprint":model_state,"model_state_descriptor":descriptor,
             "input_feature_dtypes":{c:{"dtype":str(x[c].dtype),"role":"numerical_feature"} for c in features},
-            "model_contract":{"family":selection["selected_model_family"],"fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],"selected_hyperparameters":data["selected_hyperparameters"]},
+            "model_contract":{"family":selection["selected_model_family"],"fixed_constructor_parameters":data["selected_estimator_fixed_constructor_parameters"],"selected_hyperparameters":data["selected_hyperparameters"],"effective_parameters":effective},
             "prediction_contract":{"type":"continuous_numeric","scale":"original_target_scale","unit":selection["target_contract"]["unit"]},
             "lineage":{"model_selection":selection_ref,"preparation":data["preparation_lineage"]},
-            "runtime_compatibility":{"python":platform.python_version(),"scikit_learn":sklearn.__version__},
+            "runtime_compatibility":regression_runtime_versions(),
             "security_note":"Load joblib only after exact SHA-256 verification.",
             "readiness":{"inference_demo_ready":True,"operational_modeling_ready":False,"operational_validity":"unconfirmed"}}
         payloads={"final-model-manifest.json":manifest,"final-test-evidence.json":evidence,"inference-bundle.json":bundle}
@@ -2639,9 +2681,9 @@ def validate_multiclass_frozen_model_contract(
     if not features or len(features) != len(set(features)):
         raise FinalizationContractError("Frozen feature columns must be unique and non-empty.")
     if tuple(contract.numerical_features) != tuple(contract.feature_columns):
-        raise FinalizationContractError("Dry Bean features must remain numerical-only.")
+        raise FinalizationContractError("Frozen multiclass features must remain numerical-only.")
     if contract.categorical_features:
-        raise FinalizationContractError("Dry Bean cannot acquire categorical features.")
+        raise FinalizationContractError("Frozen multiclass contract cannot acquire categorical features.")
     if (set(contract.identifier_columns) | {contract.target_column}) & set(features):
         raise FinalizationContractError("Target/identifiers cannot enter final features.")
     if len(contract.target_classes) < 3 or len(set(contract.target_classes)) != len(contract.target_classes):

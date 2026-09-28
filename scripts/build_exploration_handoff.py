@@ -446,6 +446,7 @@ def _continuous_open_reviews(
     feature_relationship_report: object,
     target_report: object,
     insights_report: object,
+    grouped_dependency_report: object | None = None,
 ) -> list[dict[str, Any]]:
     """Carry forward non-blocking continuous-regression review evidence."""
     reviews = _open_reviews(
@@ -489,6 +490,34 @@ def _continuous_open_reviews(
     for index, review in enumerate(reviews, start=1):
         if not str(review.get("review_id", "")).startswith("REV-HYP-"):
             review["review_id"] = f"REV-{index:03d}"
+
+    if grouped_dependency_report is not None and getattr(
+        grouped_dependency_report, "has_grouped_dependency", False
+    ):
+        group_columns = ", ".join(grouped_dependency_report.group_columns)
+        varying_columns = ", ".join(grouped_dependency_report.varying_columns) or "no declared column"
+        reviews.append(
+            {
+                "review_id": "REV-GRP-001",
+                "theme": "Grouped observation dependency",
+                "blocking": False,
+                "summary": (
+                    f"{grouped_dependency_report.row_count} rows form "
+                    f"{grouped_dependency_report.group_count} distinct groups over "
+                    f"({group_columns}); {grouped_dependency_report.multi_row_group_count} "
+                    f"groups cover {grouped_dependency_report.rows_in_multi_row_groups} rows "
+                    f"that differ only in ({varying_columns})."
+                ),
+                "continuation": (
+                    "Rows sharing a group are not independent. A row-level random split "
+                    "places members of one group in several partitions, so held-out error "
+                    "estimates interpolation for groups already seen in training. Report "
+                    "held-out error separately for seen and unseen groups as a "
+                    "diagnostic that never drives selection, and state the resulting "
+                    "evaluation scope."
+                ),
+            }
+        )
 
     return reviews
 
@@ -883,7 +912,7 @@ def build_static_multiclass_exploration_handoff(
     if set(numericals) != set(features):
         issues.append({
             "Scope": "Features",
-            "Issue": "Dry Bean handoff expects an entirely numerical baseline",
+            "Issue": "Multiclass handoff expects an entirely numerical baseline",
             "Details": f"features={len(features)}, numerical={len(numericals)}",
         })
     source_columns = tuple(str(value) for value in source_dataframe.columns)
@@ -1102,8 +1131,14 @@ def build_static_continuous_regression_exploration_handoff(
     quality_report: object,
     insights_report: object,
     preparation_report: object,
+    grouped_dependency_report: object | None = None,
 ) -> ExplorationHandoffReport:
-    """Build the final Notebook-01 handoff for static continuous regression."""
+    """Build the final Notebook-01 handoff for static continuous regression.
+
+    ``grouped_dependency_report`` optionally carries a
+    :class:`scripts.validate_duplicates.GroupedObservationDependencyReport`;
+    it is persisted as evidence and becomes a non-blocking open review.
+    """
     issues: list[dict[str, str]] = []
 
     slug = _text(dataset_slug)
@@ -1314,7 +1349,23 @@ def build_static_continuous_regression_exploration_handoff(
         feature_relationship_report=feature_relationship_report,
         target_report=target_report,
         insights_report=insights_report,
+        grouped_dependency_report=grouped_dependency_report,
     )
+    grouped_dependencies: list[dict[str, Any]] = []
+    if grouped_dependency_report is not None:
+        grouped_payload = grouped_dependency_report.to_payload()
+        undeclared = [
+            column
+            for column in (*grouped_payload["group_columns"], *grouped_payload["varying_columns"])
+            if column not in features
+        ]
+        if undeclared:
+            issues.append({
+                "Scope": "Grouped dependency",
+                "Issue": "Grouped-dependency columns must be candidate features",
+                "Details": repr(undeclared),
+            })
+        grouped_dependencies.append(grouped_payload)
     next_steps = _continuous_next_steps()
     expected_outputs = _continuous_expected_outputs(slug)
 
@@ -1411,6 +1462,7 @@ def build_static_continuous_regression_exploration_handoff(
                 getattr(leakage_report, "confirmed_derived_dependency_count", 0)
             ),
             "dependencies": _frame_records(dependencies),
+            "grouped_observation_dependencies": grouped_dependencies,
         },
         "exploratory_synthesis": {
             "key_insights": _frame_records(key_insights),

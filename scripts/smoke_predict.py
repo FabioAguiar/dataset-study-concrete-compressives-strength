@@ -119,6 +119,9 @@ class InputNormalizationResult:
 
 
 _RUNTIME_COMPONENTS = ("python", "pandas", "scikit_learn", "joblib")
+# Compared only when the expected contract records them (continuous v3 bundles
+# record numpy because the pickled estimator state depends on it).
+_OPTIONAL_RUNTIME_COMPONENTS = ("numpy",)
 _VERSION_PATTERN = re.compile(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?")
 
 
@@ -157,6 +160,7 @@ def current_runtime_versions() -> dict[str, str]:
         "pandas": str(pd.__version__),
         "scikit_learn": str(sklearn.__version__),
         "joblib": str(joblib.__version__),
+        "numpy": str(np.__version__),
     }
 
 
@@ -171,7 +175,8 @@ def validate_runtime_compatibility(
 
     ``exact`` compares all four components byte-for-byte and returns a report by
     default. ``load_safe`` requires an exact pandas, scikit-learn, and joblib match,
-    plus a Python major/minor match. A Python patch-only difference is compatible but
+    plus a Python major/minor match. Optional components (numpy) are compared
+    exactly whenever the expected contract records them. A Python patch-only difference is compatible but
     emits :class:`RuntimeCompatibilityWarning`. Unsafe ``load_safe`` results raise by
     default so the caller cannot reach a joblib loader accidentally.
     """
@@ -187,9 +192,12 @@ def validate_runtime_compatibility(
 
     component_reports: list[RuntimeComponentReport] = []
     warning_messages: list[str] = []
-    for component in _RUNTIME_COMPONENTS:
+    components = _RUNTIME_COMPONENTS + tuple(
+        name for name in _OPTIONAL_RUNTIME_COMPONENTS if name in expected
+    )
+    for component in components:
         expected_value = expected[component]
-        observed_value = observed[component]
+        observed_value = observed.get(component, "not recorded")
         if mode == "exact" or component != "python":
             compatible = observed_value == expected_value
             status = "compatible" if compatible else "incompatible"
@@ -1442,6 +1450,8 @@ def validate_continuous_loaded_pipeline_contract(
     expected_params = dict(_require_mapping(contract.get("fixed_constructor_parameters"), field="model_contract.fixed_constructor_parameters"))
     for key, expected in _require_mapping(contract.get("selected_hyperparameters"), field="model_contract.selected_hyperparameters").items():
         expected_params[str(key).removeprefix("model__")] = expected
+    if "effective_parameters" in contract and dict(_require_mapping(contract.get("effective_parameters"), field="model_contract.effective_parameters")) != expected_params:
+        raise InferenceContractError("Continuous effective parameters differ from fixed plus selected parameters.")
     for key, expected in expected_params.items():
         if params.get(key) != expected:
             raise InferenceContractError(f"Continuous model parameter differs for {key}.")

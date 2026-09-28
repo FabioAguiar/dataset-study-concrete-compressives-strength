@@ -733,3 +733,33 @@ def test_continuous_summary_uses_non_stratified_gate(tmp_path: Path) -> None:
         "non-stratified"
     ).all()
 
+
+
+def test_continuous_handoff_persists_grouped_dependency_as_nonblocking_review(tmp_path: Path) -> None:
+    from scripts.validate_duplicates import analyze_grouped_observation_dependency
+
+    frame = pd.DataFrame({"Cement": [100.0, 100.0, 200.0], "Age": [7, 28, 7], "Strength": [10.0, 20.0, 15.0]})
+    grouped = analyze_grouped_observation_dependency(frame, group_columns=("Cement",), varying_columns=("Age",))
+    report = build_continuous_report(tmp_path, grouped_dependency_report=grouped)
+    report.raise_if_invalid()
+    dependencies = report.payload["leakage_and_dependencies"]["grouped_observation_dependencies"]
+    assert dependencies == [grouped.to_payload()]
+    reviews = {review["review_id"]: review for review in report.payload["open_reviews"]}
+    assert reviews["REV-GRP-001"]["blocking"] is False
+    assert "seen and unseen groups" in reviews["REV-GRP-001"]["continuation"]
+
+
+def test_continuous_handoff_without_grouped_report_records_empty_dependencies(tmp_path: Path) -> None:
+    report = build_continuous_report(tmp_path)
+    assert report.payload["leakage_and_dependencies"]["grouped_observation_dependencies"] == []
+    assert all(review["review_id"] != "REV-GRP-001" for review in report.payload["open_reviews"])
+
+
+def test_continuous_handoff_rejects_grouped_columns_outside_features(tmp_path: Path) -> None:
+    from scripts.validate_duplicates import analyze_grouped_observation_dependency
+
+    frame = pd.DataFrame({"Water": [1.0, 1.0], "Age": [7, 28]})
+    grouped = analyze_grouped_observation_dependency(frame, group_columns=("Water",), varying_columns=("Age",))
+    report = build_continuous_report(tmp_path, grouped_dependency_report=grouped)
+    with pytest.raises(Exception):
+        report.raise_if_invalid()

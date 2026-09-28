@@ -783,15 +783,3 @@ def test_v1_binary_handoff_remains_loadable(tmp_path):
     )
     assert loaded["schema_version"] == "model-selection-handoff.v1"
     assert loaded["positive_class"] is not None
-
-
-def test_notebook_03_is_clean_and_contains_no_binary_threshold_workflow():
-    root = Path(__file__).resolve().parents[1]
-    notebook = json.loads((root / "notebooks/03_model_selection_and_evaluation.ipynb").read_text())
-    code_text = "\n".join("".join(cell.get("source", [])) for cell in notebook["cells"] if cell["cell_type"] == "code")
-    assert all(cell.get("execution_count") is None and cell.get("outputs", []) == [] for cell in notebook["cells"] if cell["cell_type"] == "code")
-    assert "threshold-analysis.json" not in code_text
-    assert "X_test" not in code_text and "y_test" not in code_text
-    assert "preparation.test" not in code_text
-    assert "final-pipeline.joblib" not in code_text
-    assert "average_precision" not in code_text

@@ -462,3 +462,76 @@ def test_repeated_profiles_without_identifiers_can_expose_target_disagreement() 
     assert pd.isna(profiles.iloc[0]["Distinct identifier count"])
     assert profiles.iloc[0]["Classification"] == "Target disagreement"
     assert profiles.iloc[0]["Target values"] == "'A', 'B'"
+
+
+# ---------------------------------------------------------------------------
+# Grouped observation dependency
+# ---------------------------------------------------------------------------
+
+from scripts.validate_duplicates import (  # noqa: E402
+    analyze_grouped_observation_dependency,
+    grouped_overlap_mask,
+)
+
+
+def _mixtures() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "cement": [300.0, 300.0, 300.0, 250.0, 250.0, 400.0],
+            "water": [180.0, 180.0, 180.0, 170.0, 170.0, 160.0],
+            "age": [3, 7, 28, 7, 28, 28],
+            "strength": [10.0, 20.0, 30.0, 15.0, 25.0, 50.0],
+        }
+    )
+
+
+def test_grouped_dependency_counts_groups_varying_only_in_condition() -> None:
+    frame = _mixtures()
+    before = frame.copy(deep=True)
+    report = analyze_grouped_observation_dependency(
+        frame, group_columns=("cement", "water"), varying_columns=("age",)
+    )
+    pd.testing.assert_frame_equal(frame, before)
+    assert report.group_count == 3
+    assert report.multi_row_group_count == 2
+    assert report.rows_in_multi_row_groups == 5
+    assert report.max_group_size == 3
+    assert report.group_size_counts == {1: 1, 2: 1, 3: 1}
+    assert report.varying_column_distinct_counts == {"age": 3}
+    assert report.has_grouped_dependency
+    payload = report.to_payload()
+    assert payload["group_columns"] == ["cement", "water"]
+    assert payload["group_size_counts"] == {"1": 1, "2": 1, "3": 1}
+    assert report.group_size_frame()["Row count"].sum() == len(frame)
+
+
+def test_grouped_dependency_reports_no_dependency_for_unique_groups() -> None:
+    report = analyze_grouped_observation_dependency(
+        _mixtures(), group_columns=("cement", "water", "age")
+    )
+    assert report.group_count == 6 and not report.has_grouped_dependency
+
+
+@pytest.mark.parametrize(
+    ("group_columns", "varying_columns"),
+    [((), ("age",)), (("cement", "cement"), ()), (("missing",), ()), (("cement",), ("cement",))],
+)
+def test_grouped_dependency_rejects_invalid_column_declarations(group_columns, varying_columns) -> None:
+    with pytest.raises(ValueError):
+        analyze_grouped_observation_dependency(
+            _mixtures(), group_columns=group_columns, varying_columns=varying_columns
+        )
+
+
+def test_grouped_overlap_mask_marks_rows_whose_group_occurs_in_reference() -> None:
+    frame = _mixtures()
+    reference, evaluated = frame.iloc[[0, 3]], frame.iloc[[1, 2, 4, 5]]
+    mask = grouped_overlap_mask(reference, evaluated, group_columns=("cement", "water"))
+    assert mask.index.equals(evaluated.index)
+    assert mask.tolist() == [True, True, True, False]
+
+
+def test_grouped_overlap_mask_requires_group_columns_in_both_frames() -> None:
+    frame = _mixtures()
+    with pytest.raises(ValueError):
+        grouped_overlap_mask(frame.drop(columns=["water"]), frame, group_columns=("cement", "water"))

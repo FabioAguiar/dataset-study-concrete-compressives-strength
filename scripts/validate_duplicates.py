@@ -730,3 +730,133 @@ def _ordered_display_values(series: pd.Series) -> tuple[str, ...]:
             values.append(display_value)
 
     return tuple(values)
+
+
+@dataclass(frozen=True, slots=True)
+class GroupedObservationDependencyReport:
+    """Summarize rows that share one group key while other columns vary.
+
+    A typical case is one physical composition (the group columns) measured
+    under several conditions (the varying columns). Rows in one group are not
+    duplicates, but they are not independent either: a row-level random split
+    can place members of the same group in different partitions.
+    """
+
+    row_count: int
+    group_columns: tuple[str, ...]
+    varying_columns: tuple[str, ...]
+    group_count: int
+    multi_row_group_count: int
+    rows_in_multi_row_groups: int
+    max_group_size: int
+    group_size_counts: dict[int, int]
+    varying_column_distinct_counts: dict[str, int]
+
+    @property
+    def has_grouped_dependency(self) -> bool:
+        """Return whether at least one group spans several rows."""
+        return self.multi_row_group_count > 0
+
+    def summary_frame(self) -> pd.DataFrame:
+        """Return a compact tabular summary for notebook display."""
+        return pd.DataFrame(
+            [
+                {"Metric": "Rows", "Value": self.row_count},
+                {"Metric": "Distinct groups", "Value": self.group_count},
+                {"Metric": "Groups with several rows", "Value": self.multi_row_group_count},
+                {"Metric": "Rows in multi-row groups", "Value": self.rows_in_multi_row_groups},
+                {"Metric": "Largest group size", "Value": self.max_group_size},
+                {
+                    "Metric": "Mean rows per group",
+                    "Value": round(self.row_count / self.group_count, 3) if self.group_count else 0.0,
+                },
+            ],
+            dtype=object,
+        )
+
+    def group_size_frame(self) -> pd.DataFrame:
+        """Return the number of groups per group size."""
+        return pd.DataFrame(
+            [
+                {"Group size": size, "Group count": count, "Row count": size * count}
+                for size, count in sorted(self.group_size_counts.items())
+            ]
+        )
+
+    def to_payload(self) -> dict[str, object]:
+        """Return a JSON-compatible representation for handoff persistence."""
+        return {
+            "group_columns": list(self.group_columns),
+            "varying_columns": list(self.varying_columns),
+            "row_count": self.row_count,
+            "group_count": self.group_count,
+            "multi_row_group_count": self.multi_row_group_count,
+            "rows_in_multi_row_groups": self.rows_in_multi_row_groups,
+            "max_group_size": self.max_group_size,
+            "group_size_counts": {str(size): count for size, count in sorted(self.group_size_counts.items())},
+            "varying_column_distinct_counts": dict(self.varying_column_distinct_counts),
+        }
+
+
+def analyze_grouped_observation_dependency(
+    dataframe: pd.DataFrame,
+    *,
+    group_columns: Sequence[object],
+    varying_columns: Sequence[object] = (),
+) -> GroupedObservationDependencyReport:
+    """Count rows sharing identical values over ``group_columns``.
+
+    The analysis never mutates, drops, or regroups rows. Missing values are
+    treated as a regular group value so that no row is silently excluded.
+    """
+    if not isinstance(dataframe, pd.DataFrame):
+        raise TypeError("dataframe must be a pandas DataFrame.")
+    groups = tuple(_normalize_column_name(column, field_name="group_columns") for column in group_columns)
+    varying = tuple(_normalize_column_name(column, field_name="varying_columns") for column in varying_columns)
+    if not groups:
+        raise ValueError("group_columns must declare at least one column.")
+    for name, values in (("group_columns", groups), ("varying_columns", varying)):
+        duplicated = _find_duplicates(values)
+        if duplicated:
+            raise ValueError(f"{name} contains duplicate columns: {duplicated}")
+        missing = [column for column in values if column not in dataframe.columns]
+        if missing:
+            raise ValueError(f"{name} are absent from the dataframe: {missing}")
+    if set(groups) & set(varying):
+        raise ValueError("group_columns and varying_columns must be disjoint.")
+
+    sizes = dataframe.groupby(list(groups), dropna=False, sort=False).size()
+    size_counts = {int(size): int(count) for size, count in sizes.value_counts().items()}
+    multi = sizes[sizes > 1]
+    return GroupedObservationDependencyReport(
+        row_count=int(len(dataframe)),
+        group_columns=groups,
+        varying_columns=varying,
+        group_count=int(len(sizes)),
+        multi_row_group_count=int(len(multi)),
+        rows_in_multi_row_groups=int(multi.sum()),
+        max_group_size=int(sizes.max()) if len(sizes) else 0,
+        group_size_counts=size_counts,
+        varying_column_distinct_counts={
+            column: int(dataframe[column].nunique(dropna=False)) for column in varying
+        },
+    )
+
+
+def grouped_overlap_mask(
+    reference: pd.DataFrame,
+    evaluated: pd.DataFrame,
+    *,
+    group_columns: Sequence[object],
+) -> pd.Series:
+    """Return, per evaluated row, whether its group key occurs in ``reference``."""
+    groups = [_normalize_column_name(column, field_name="group_columns") for column in group_columns]
+    if not groups:
+        raise ValueError("group_columns must declare at least one column.")
+    for name, frame in (("reference", reference), ("evaluated", evaluated)):
+        missing = [column for column in groups if column not in frame.columns]
+        if missing:
+            raise ValueError(f"{name} lacks group columns: {missing}")
+    reference_keys = pd.MultiIndex.from_frame(reference.loc[:, groups])
+    evaluated_keys = pd.MultiIndex.from_frame(evaluated.loc[:, groups])
+    return pd.Series(evaluated_keys.isin(reference_keys), index=evaluated.index, name="group_seen_in_reference")

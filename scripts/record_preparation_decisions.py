@@ -1389,7 +1389,7 @@ def record_static_multiclass_preparation_decisions(
         guardrail(
             "GRD-002", "Cleaning", "Do not deduplicate from row equality alone", fields, "High",
             "Drop exact matches without independent observation identity evidence.",
-            "The released Dry Bean table does not provide a source observation identifier.",
+            "The released source table does not provide a source observation identifier.",
             "No source row is removed solely because all released values match another row.",
         ),
         guardrail(

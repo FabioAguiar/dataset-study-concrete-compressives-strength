@@ -270,6 +270,18 @@ def test_runtime_load_safe_blocks_material_mismatch(component: str, observed: st
     assert detail.observed == observed
 
 
+def test_runtime_compares_numpy_only_when_the_contract_records_it() -> None:
+    base = {"python": "3.13.13", "pandas": "3.0.5", "scikit_learn": "1.9.0", "joblib": "1.5.3"}
+    observed = dict(base, numpy="1.26.4")
+    assert smoke.validate_runtime_compatibility(base, observed_versions=observed, mode="load_safe").compatible
+    with pytest.raises(smoke.RuntimeCompatibilityError) as exc:
+        smoke.validate_runtime_compatibility(dict(base, numpy="2.5.2"), observed_versions=observed, mode="load_safe")
+    assert _component(exc.value.report, "numpy").observed == "1.26.4"
+    with pytest.raises(smoke.RuntimeCompatibilityError):
+        smoke.validate_runtime_compatibility(dict(base, numpy="2.5.2"), observed_versions=base, mode="load_safe")
+    assert "numpy" in smoke.current_runtime_versions()
+
+
 def test_runtime_exact_reports_without_raising_by_default() -> None:
     expected = {"python": "3.13.13", "pandas": "3.0.5", "scikit_learn": "1.9.0", "joblib": "1.5.3"}
     report = smoke.validate_runtime_compatibility(expected, observed_versions=dict(expected, pandas="2.2.3"), mode="exact")
@@ -759,4 +771,5 @@ def test_current_runtime_reports_required_components() -> None:
         "pandas": pd.__version__,
         "scikit_learn": sklearn.__version__,
         "joblib": joblib.__version__,
+        "numpy": np.__version__,
     }

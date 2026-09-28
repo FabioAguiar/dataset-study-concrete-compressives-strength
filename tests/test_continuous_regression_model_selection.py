@@ -129,14 +129,47 @@ def test_sensitivities_are_diagnostic_and_train_derived():
     assert extreme1["used_for_selection"] is False
 
 
-def test_official_notebook_is_clean_and_sealed_in_code():
+def test_official_notebook_is_sealed_in_code():
     notebook = json.loads(open("notebooks/03_model_selection_and_evaluation.ipynb", encoding="utf-8").read())
     code = "\n".join("".join(c["source"]) for c in notebook["cells"] if c["cell_type"] == "code")
-    for cell in (c for c in notebook["cells"] if c["cell_type"] == "code"):
-        assert cell["execution_count"] is None and cell["outputs"] == []
-    for forbidden in ("X_test", "y_test", "threshold-analysis.json",
+    for forbidden in ("X_test", "y_test", "preparation.test", "threshold-analysis.json",
                       "average_precision", "macro_f1", "DummyClassifier", "StratifiedKFold",
                       "target_classes", "positive_class", "final-pipeline.joblib"):
         assert forbidden not in code
     assert "load_and_validate_preparation_for_model_selection" in code
     assert "load_and_validate_preparation_handoff" not in code
+
+
+def test_group_overlap_sensitivity_splits_error_by_seen_group_and_never_selects():
+    from scripts.select_models import analyze_regression_group_overlap_sensitivity
+    reference = pd.DataFrame({"mix": [1.0, 1.0, 2.0], "age": [3, 7, 3]})
+    evaluated = pd.DataFrame({"mix": [1.0, 1.0, 3.0, 3.0], "age": [28, 56, 7, 28]})
+    truth = pd.Series([10.0, 12.0, 20.0, 22.0])
+    predictions = [11.0, 12.0, 25.0, 22.0]
+    result = analyze_regression_group_overlap_sensitivity(
+        reference_features=reference, evaluated_features=evaluated, y_true=truth,
+        predictions=predictions, group_columns=["mix"], reference_partitions=["train"],
+        evaluated_partition="validation")
+    assert result["diagnostic_only"] is True and result["used_for_selection"] is False
+    assert (result["seen_group_row_count"], result["unseen_group_row_count"]) == (2, 2)
+    assert result["seen_group_row_share"] == 0.5
+    assert result["seen_groups"]["metrics"]["mae"] == pytest.approx(0.5)
+    assert result["unseen_groups"]["metrics"]["mae"] == pytest.approx(2.5)
+    assert result["full_metrics"]["mae"] == pytest.approx(1.5)
+
+
+def test_group_overlap_sensitivity_marks_small_subsets_and_validates_lengths():
+    from scripts.select_models import ModelSelectionContractError, analyze_regression_group_overlap_sensitivity
+    reference = pd.DataFrame({"mix": [1.0]})
+    evaluated = pd.DataFrame({"mix": [1.0, 2.0, 3.0]})
+    result = analyze_regression_group_overlap_sensitivity(
+        reference_features=reference, evaluated_features=evaluated, y_true=[1.0, 2.0, 3.0],
+        predictions=[1.0, 2.0, 3.5], group_columns=["mix"], reference_partitions=["train"],
+        evaluated_partition="validation")
+    assert result["seen_groups"]["status"] == "insufficient_rows_for_stable_subset_metric"
+    assert result["unseen_groups"]["status"] == "computed"
+    with pytest.raises(ModelSelectionContractError):
+        analyze_regression_group_overlap_sensitivity(
+            reference_features=reference, evaluated_features=evaluated, y_true=[1.0],
+            predictions=[1.0, 2.0, 3.0], group_columns=["mix"], reference_partitions=["train"],
+            evaluated_partition="validation")

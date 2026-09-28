@@ -1087,7 +1087,7 @@ def plot_numerical_boxplots(
     for axis, feature in zip(axes.flat, features, strict=False):
         values = projection[feature].dropna()
         if not values.empty:
-            axis.boxplot(values, vert=False)
+            axis.boxplot(values, orientation="horizontal")
         axis.set_title(str(feature))
         axis.set_yticks([])
         axis.grid(axis="x", alpha=0.2)

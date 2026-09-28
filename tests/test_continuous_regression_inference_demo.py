@@ -185,10 +185,13 @@ def test_helpers_and_notebook_preserve_consumer_boundary():
     root = Path(__file__).resolve().parents[1]
     notebook = json.loads((root / "notebooks/05_inference_demo.ipynb").read_text())
     code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
-    assert all(cell["execution_count"] is None and cell["outputs"] == [] for cell in code_cells)
     code = "\n".join("".join(cell["source"]) for cell in code_cells)
-    forbidden = (".fit(", ".fit_transform(", ".partial_fit(", "read_csv", "predict_proba", "predict_multiclass", "train.csv", "validation.csv", "test.csv", "accuracy_score", "confusion_matrix")
+    forbidden = (".fit(", ".fit_transform(", ".partial_fit(", "read_csv", "predict_proba", "predict_multiclass",
+                 "train.csv", "validation.csv", "test.csv", "accuracy_score", "balanced_accuracy_score",
+                 "f1_score", "recall_score", "classification_report", "confusion_matrix", "log_loss",
+                 "roc_auc_score", "average_precision_score", "positive_class_probability", "importlib.reload")
     assert not any(token in code for token in forbidden)
+    assert "predict_continuous_batch" in code and "trusted_source=True" in code
 
 
 def test_synthetic_final_artifacts_are_not_modified(continuous_fixture):

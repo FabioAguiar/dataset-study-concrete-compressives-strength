@@ -1,0 +1,26 @@
+{
+  "schema_version": "source-contract.v1",
+  "dataset_slug": "concrete-compressive-strength",
+  "provider": "uci",
+  "repository": "UCI Machine Learning Repository",
+  "dataset_id": 165,
+  "dataset_name": "Concrete Compressive Strength",
+  "dataset_doi": "10.24432/C5PK67",
+  "dataset_url": "https://archive.ics.uci.edu/dataset/165/concrete+compressive+strength",
+  "original_attribution": "I-Cheng Yeh. Modeling of strength of high-performance concrete using artificial neural networks. Cement and Concrete Research 28(12), 1998. doi:10.1016/S0008-8846(98)00165-3",
+  "source_license": "CC BY 4.0",
+  "redistribution": "The raw files are not redistributed by this repository; they must be acquired from UCI with scripts/download_data.py.",
+  "acquisition_client": "ucimlrepo (fetch_ucirepo), materialized by scripts.download_data.acquire_uci_dataset",
+  "destination": "data/raw/concrete-compressive-strength",
+  "files": [
+    {
+      "filename": "dataset.csv",
+      "sha256": "2f6e632031e655e2344153e4d84bbebcfc7d53f91cad3ab8130076a8e1d4e1be",
+      "size_bytes": 48501,
+      "rows": 1030,
+      "columns": 9
+    }
+  ],
+  "materialization_note": "dataset.csv is written by pandas from the ucimlrepo dataframe, so its bytes depend on the locked pandas version as well as on the UCI content.",
+  "verification_evidence": "The SHA-256 was recorded by the canonical run and independently confirmed on 2026-09-27 by a forced ucimlrepo download of dataset 165 (UCI last_updated: Sun Feb 11 2024) under the locked runtime."
+}

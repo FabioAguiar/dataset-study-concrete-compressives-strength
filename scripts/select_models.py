@@ -1337,6 +1337,7 @@ def runtime_versions() -> dict[str, str]:
         "python": platform.python_version(),
         "pandas": pd.__version__,
         "scikit_learn": sklearn.__version__,
+        "numpy": np.__version__,
         "platform": platform.system(),
     }
 
@@ -3567,6 +3568,40 @@ def analyze_regression_target_extreme_sensitivity(*, y_train: pd.Series, y_valid
             "excluding_train_defined_extremes": subset(~extreme), "extreme_rows": subset(extreme)}
 
 
+def analyze_regression_group_overlap_sensitivity(*, reference_features: pd.DataFrame,
+        evaluated_features: pd.DataFrame, y_true: pd.Series | Sequence[float],
+        predictions: Sequence[float], group_columns: Sequence[str],
+        reference_partitions: Sequence[str], evaluated_partition: str) -> dict[str, Any]:
+    """Split held-out error by whether each row's group also occurs in the fitting data.
+
+    The result is descriptive only: it never feeds selection, tuning, or any
+    frozen decision, and it does not prove leakage or duplicate identity.
+    """
+    from scripts.validate_duplicates import grouped_overlap_mask
+
+    columns = [str(column) for column in group_columns]
+    if not columns:
+        raise ModelSelectionContractError("group_columns must declare at least one column.")
+    if len(evaluated_features) != len(predictions) or len(evaluated_features) != len(y_true):
+        raise ModelSelectionContractError("Evaluated rows, targets, and predictions differ in length.")
+    seen = grouped_overlap_mask(reference_features, evaluated_features, group_columns=columns).to_numpy(dtype=bool)
+    truth = np.asarray(y_true, dtype=float); pred = np.asarray(predictions, dtype=float)
+    def subset(mask: np.ndarray) -> dict[str, Any]:
+        return ({"status": "computed", "row_count": int(mask.sum()), "metrics": compute_regression_metrics(truth[mask], pred[mask])}
+                if mask.sum() >= 2 else {"status": "insufficient_rows_for_stable_subset_metric", "row_count": int(mask.sum())})
+    return {"diagnostic_only": True, "used_for_selection": False, "proven_leakage": False,
+            "group_columns": columns, "reference_partitions": list(reference_partitions),
+            "evaluated_partition": str(evaluated_partition),
+            "evaluated_row_count": int(len(seen)), "seen_group_row_count": int(seen.sum()),
+            "unseen_group_row_count": int((~seen).sum()),
+            "seen_group_row_share": float(seen.mean()) if len(seen) else 0.0,
+            "full_metrics": compute_regression_metrics(truth, pred),
+            "seen_groups": subset(seen), "unseen_groups": subset(~seen),
+            "interpretation": ("Rows whose group occurs in the fitting partitions measure interpolation "
+                               "for known groups; rows from unseen groups approximate generalization to "
+                               "new groups. The split mixes both, so the aggregate metric is scoped accordingly.")}
+
+
 def write_regression_model_selection_artifacts(*, output_directory: str | Path,
         artifacts: Mapping[str, Any], overwrite: bool = False) -> ArtifactWriteResult:
     output = Path(output_directory)
@@ -3696,6 +3731,14 @@ def _load_and_validate_regression_model_selection_handoff(*, project_root: str |
         raise ModelSelectionHandoffError("Target contract differs across selection artifacts.")
     if payload.get("available_feature_columns") != feature.get("feature_columns") or payload.get("selected_feature_columns") != feature.get("feature_columns"):
         raise ModelSelectionHandoffError("Feature order differs from preparation.")
+    diagnostics = payload.get("evaluation_diagnostics")
+    if diagnostics is not None:
+        group_columns = diagnostics.get("group_overlap_columns") if isinstance(diagnostics, dict) else None
+        if (not isinstance(group_columns, list) or not group_columns
+                or len(set(group_columns)) != len(group_columns)
+                or not set(group_columns) < set(payload.get("selected_feature_columns") or [])
+                or diagnostics.get("used_for_selection") is not False):
+            raise ModelSelectionHandoffError("Invalid evaluation-diagnostics contract.")
     feature_contract = manifest.get("feature_contract", {})
     if (feature_contract.get("available_features") != payload.get("available_feature_columns")
             or feature_contract.get("selected_features") != payload.get("selected_feature_columns")
@@ -3783,4 +3826,4 @@ __all__.extend(["REGRESSION_ARTIFACT_FILENAMES", "RegressionPartitionRoles",
     "run_regression_model_search", "summarize_regression_search_results", "compute_regression_metrics",
     "evaluate_regression_estimator", "select_regression_candidate_model",
     "analyze_regression_repeated_profile_sensitivity", "analyze_regression_target_extreme_sensitivity",
-    "write_regression_model_selection_artifacts"])
+    "analyze_regression_group_overlap_sensitivity", "write_regression_model_selection_artifacts"])

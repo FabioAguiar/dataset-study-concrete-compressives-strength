@@ -108,7 +108,7 @@ def _specs():
             ),
             "scale_numerical": True,
             "search_strategy": "GridSearchCV",
-            "search_space": {"model__C": [0.1, 1.0], "model__penalty": ["l2"]},
+            "search_space": {"model__C": [0.1, 1.0]},
             "candidate_count": 2,
         },
         {

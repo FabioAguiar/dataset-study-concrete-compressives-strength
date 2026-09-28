@@ -655,6 +655,46 @@ def acquire_url_file(
     )
 
 
+SOURCE_CONTRACT_PATH: Final[str] = "contracts/source.json"
+
+
+def load_source_contract(
+    *,
+    project_root: str | Path = PROJECT_ROOT,
+    contract_path: str | Path = SOURCE_CONTRACT_PATH,
+) -> dict:
+    """Load the versioned source contract that pins the expected raw files."""
+    path = resolve_project_path(contract_path, project_root=project_root)
+    contract = json.loads(path.read_text(encoding="utf-8"))
+    if contract.get("schema_version") != "source-contract.v1":
+        raise DatasetDownloadError(f"{path.name} must declare source-contract.v1.")
+    files = contract.get("files")
+    if not isinstance(files, list) or not files:
+        raise DatasetDownloadError(f"{path.name} declares no pinned files.")
+    return contract
+
+
+def verify_acquisition_against_source_contract(
+    acquisition: DatasetAcquisition,
+    contract: Mapping[str, object],
+) -> dict[str, str]:
+    """Fail unless every pinned file exists with the pinned SHA-256 and size."""
+    observed: dict[str, str] = {}
+    for pinned in contract["files"]:
+        filename = _validate_filename(str(pinned["filename"]))
+        path = acquisition.destination / filename
+        if not path.is_file():
+            raise DatasetDownloadError(f"Pinned source file is missing: {filename}")
+        _verify_sha256(path, str(pinned["sha256"]))
+        size = path.stat().st_size
+        if size != int(pinned["size_bytes"]):
+            raise DatasetDownloadError(
+                f"Size mismatch for {filename}: expected {pinned['size_bytes']}, observed {size}."
+            )
+        observed[filename] = str(pinned["sha256"])
+    return observed
+
+
 def _print_acquisition(acquisition: DatasetAcquisition) -> None:
     """Render a compact deterministic acquisition summary."""
     print(f"Source type: {acquisition.source_kind}")

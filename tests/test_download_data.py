@@ -170,3 +170,73 @@ def test_acquire_uci_dataset_rejects_partial_existing_materialization(
             destination="data/raw/dry-bean",
             project_root=project,
         )
+
+
+# ---------------------------------------------------------------------------
+# Versioned source contract
+# ---------------------------------------------------------------------------
+
+import hashlib  # noqa: E402
+
+from scripts.download_data import (  # noqa: E402
+    load_source_contract,
+    verify_acquisition_against_source_contract,
+)
+
+
+def _pinned_acquisition(tmp_path: Path, content: bytes = b"a,b\n1,2\n"):
+    destination = tmp_path / "data" / "raw" / "sample"
+    destination.mkdir(parents=True)
+    (destination / "dataset.csv").write_bytes(content)
+    acquisition = DatasetAcquisition(
+        source_kind="uci",
+        source_reference="UCI ML Repository dataset 1",
+        destination=destination,
+        resolved_path=destination / "dataset.csv",
+        files=(destination / "dataset.csv",),
+        project_root=tmp_path,
+    )
+    contract = {
+        "schema_version": "source-contract.v1",
+        "files": [{"filename": "dataset.csv", "sha256": hashlib.sha256(content).hexdigest(),
+                   "size_bytes": len(content)}],
+    }
+    return acquisition, contract
+
+
+def test_source_contract_verification_accepts_pinned_bytes(tmp_path: Path) -> None:
+    acquisition, contract = _pinned_acquisition(tmp_path)
+    observed = verify_acquisition_against_source_contract(acquisition, contract)
+    assert observed == {"dataset.csv": contract["files"][0]["sha256"]}
+
+
+def test_source_contract_verification_rejects_changed_bytes(tmp_path: Path) -> None:
+    acquisition, contract = _pinned_acquisition(tmp_path)
+    (acquisition.destination / "dataset.csv").write_bytes(b"a,b\n1,3\n")
+    with pytest.raises(DatasetDownloadError):
+        verify_acquisition_against_source_contract(acquisition, contract)
+
+
+def test_source_contract_verification_rejects_missing_file(tmp_path: Path) -> None:
+    acquisition, contract = _pinned_acquisition(tmp_path)
+    (acquisition.destination / "dataset.csv").unlink()
+    with pytest.raises(DatasetDownloadError):
+        verify_acquisition_against_source_contract(acquisition, contract)
+
+
+def test_load_source_contract_requires_schema_and_files(tmp_path: Path) -> None:
+    path = tmp_path / "contracts" / "source.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"schema_version": "source-contract.v1", "files": []}), encoding="utf-8")
+    with pytest.raises(DatasetDownloadError):
+        load_source_contract(project_root=tmp_path)
+
+
+def test_repository_source_contract_pins_the_concrete_uci_source() -> None:
+    contract = load_source_contract()
+    assert contract["dataset_id"] == 165
+    assert contract["source_license"] == "CC BY 4.0"
+    (pinned,) = contract["files"]
+    assert pinned["filename"] == "dataset.csv"
+    assert pinned["rows"] == 1030 and pinned["columns"] == 9
+    assert len(pinned["sha256"]) == 64

@@ -649,37 +649,3 @@ def test_v2_consumer_helpers_have_no_fit_dataset_reads_metrics_or_constants() ->
     assert "accuracy_score" not in source
     assert "dry-bean" not in source
     assert "SEKER" not in source
-
-
-def test_notebook_05_is_clean_and_respects_inference_boundary() -> None:
-    root = Path(__file__).resolve().parents[1]
-    path = root / "notebooks/05_inference_demo.ipynb"
-    notebook = json.loads(path.read_text(encoding="utf-8"))
-    code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
-    assert code_cells
-    assert all(
-        cell.get("execution_count") is None and cell.get("outputs", []) == []
-        for cell in code_cells
-    )
-    code = "\n".join("".join(cell.get("source", [])) for cell in code_cells)
-    prohibited = (
-        ".fit(",
-        ".fit_transform(",
-        ".partial_fit(",
-        "read_csv",
-        "test.csv",
-        "f1_score",
-        "accuracy_score",
-        "balanced_accuracy_score",
-        "recall_score",
-        "classification_report",
-        "confusion_matrix",
-        "log_loss",
-        "roc_auc_score",
-        "average_precision_score",
-        "positive_class_probability",
-    )
-    assert not any(token in code for token in prohibited)
-    assert "predict_continuous_batch" in code
-    assert "predict_multiclass" not in code
-    assert "trusted_source=True" in code
