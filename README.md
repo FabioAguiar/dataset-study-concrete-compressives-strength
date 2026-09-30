@@ -362,6 +362,31 @@ environment. It reproduced the original run's source, split, selected
 candidate, model bytes, and test metrics exactly; it is a reproduction of the
 frozen contract, not a new use of the test partition for development.
 
+### Canonical run manifest
+
+[`evidence/canonical-run.json`](evidence/canonical-run.json) is a
+machine-readable projection of the canonical evidence: source identity, split
+policy, row counts, partition-membership fingerprints (SHA-256 of each
+partition's technical membership tokens in source order), CV configuration,
+the full candidate space, family winners, validation metrics, the selection
+result, the final configuration, final-test metrics and residual diagnostics,
+and the validation/test mixture-overlap diagnostic. It stores no rows,
+predictions, residuals or model bytes and adds no decision of its own.
+
+`python -m scripts.canonical_run build` derives it only from the persisted,
+hash-validated artifacts and refuses to run outside the environment declared
+by `.python-version` and `pylock.toml`; `verify` compares a fresh execution
+with it. The committed manifest was built from a from-scratch re-execution of
+Notebooks 01–04 in the locked environment on Linux x86_64 (the canonical run
+executed on Linux aarch64). That execution reproduced the source, split,
+memberships, every family winner, the selection, the final configuration, the
+model bytes (`6e6a5a97…`), and the final-test and mixture metrics exactly. Its
+`reference_verification` block records the check against the committed
+executed notebooks and this README: 52 of 55 values are identical, and the
+three differences are the last digits of Ridge's validation MAE/MedAE and
+CV-MAE standard deviation (at most 1.4e-14), an architecture-level
+floating-point effect of the linear solver that changes no decision.
+
 ### Notebook versioning
 
 The official notebooks are versioned **executed**: each was run top to bottom
@@ -395,6 +420,7 @@ end to end, inference, artifact corruption, and fail-closed behavior.
 pyproject.toml   metadata, dependency ranges, dependency groups
 pylock.toml      generated PEP 751 lock
 contracts/       pinned UCI source contract
+evidence/        canonical run manifest (machine-readable reference evidence)
 notebooks/       official executed Concrete notebooks 01–05
 scripts/         reusable validation, preparation, selection, inference, and runtime-contract code
 tests/           scientific contracts, compatibility, corruption, and study-integrity tests
