@@ -1,0 +1,677 @@
+{
+  "artifact_type": "canonical_reference_run",
+  "cross_validation": {
+    "fit_partition": "train_only",
+    "n_splits": 5,
+    "random_state": 42,
+    "shuffle": true,
+    "strategy": "KFold"
+  },
+  "dataset": {
+    "dataset_doi": "10.24432/C5PK67",
+    "name": "Concrete Compressive Strength",
+    "repository": "UCI Machine Learning Repository",
+    "slug": "concrete-compressive-strength",
+    "source_column_count": 9,
+    "source_file": "dataset.csv",
+    "source_row_count": 1030,
+    "source_sha256": "2f6e632031e655e2344153e4d84bbebcfc7d53f91cad3ab8130076a8e1d4e1be",
+    "source_size_bytes": 48501,
+    "uci_dataset_id": 165
+  },
+  "derivation": {
+    "adds_no_decision": true,
+    "method": "projection of persisted, hash-validated runtime artifacts (scripts/canonical_run.py)",
+    "row_level_data_persisted": false
+  },
+  "features": {
+    "count": 8,
+    "identifiers": [],
+    "ordered_columns": [
+      "Cement",
+      "Blast Furnace Slag",
+      "Fly Ash",
+      "Water",
+      "Superplasticizer",
+      "Coarse Aggregate",
+      "Fine Aggregate",
+      "Age"
+    ]
+  },
+  "final_model": {
+    "artifact_path": "artifacts/models/concrete-compressive-strength/final-pipeline.joblib",
+    "artifact_sha256": "6e6a5a970c6e91b4ae075c48e4cd4a3c21f0b45a9223e3945906fd8c8b2a5032",
+    "final_fit_count": 1,
+    "fit_row_count": 875,
+    "frozen_finalization_contract_fingerprint": "fb68d2584f119bdcc987831b52b7369e55c7df85ddd85718b8e01574e20253e4",
+    "model_state_fingerprint": "9c14201607cdfcf0e92ac902361fa6815641e3c143c5a47c43727293069451ff",
+    "selected_estimator_effective_parameters": {
+      "categorical_features": "from_dtype",
+      "early_stopping": "auto",
+      "l2_regularization": 1.0,
+      "learning_rate": 0.1,
+      "loss": "squared_error",
+      "max_bins": 255,
+      "max_features": 1.0,
+      "max_iter": 300,
+      "max_leaf_nodes": 15,
+      "min_samples_leaf": 10,
+      "n_iter_no_change": 10,
+      "random_state": 42,
+      "scoring": "loss",
+      "tol": 1e-07,
+      "validation_fraction": 0.1,
+      "verbose": 0,
+      "warm_start": false
+    },
+    "training_partitions": [
+      "train",
+      "validation"
+    ]
+  },
+  "final_test": {
+    "evaluation_count": 1,
+    "metrics": {
+      "absolute_error_p50": 1.6363375289081343,
+      "absolute_error_p90": 6.430561930160178,
+      "absolute_error_p95": 7.746495446788026,
+      "mae": 2.5821598594400785,
+      "max_absolute_error": 26.625235976627863,
+      "medae": 1.6363375289081343,
+      "r2": 0.9386817911506206,
+      "residual_mean": 0.7576955271510751,
+      "residual_standard_deviation": 4.155111168469415,
+      "rmse": 4.210423324038603
+    },
+    "prediction_call_count": 1,
+    "row_count": 155,
+    "validation_to_test_deltas": {
+      "test_mae_minus_validation_mae": -0.15949547409280962,
+      "test_medae_minus_validation_medae": -0.1669484690280587,
+      "test_r2_minus_validation_r2": 0.0050390465599013945,
+      "test_rmse_minus_validation_rmse": 0.12337507674837944
+    }
+  },
+  "mixture_overlap": {
+    "group_columns": [
+      "Cement",
+      "Blast Furnace Slag",
+      "Fly Ash",
+      "Water",
+      "Superplasticizer",
+      "Coarse Aggregate",
+      "Fine Aggregate"
+    ],
+    "proven_duplicate_identity": false,
+    "test": {
+      "diagnostic_only": true,
+      "evaluated_partition": "test",
+      "evaluated_row_count": 155,
+      "full": {
+        "metrics": {
+          "absolute_error_p50": 1.6363375289081343,
+          "absolute_error_p90": 6.430561930160178,
+          "absolute_error_p95": 7.746495446788026,
+          "mae": 2.5821598594400785,
+          "max_absolute_error": 26.625235976627863,
+          "medae": 1.6363375289081343,
+          "r2": 0.9386817911506206,
+          "residual_mean": 0.7576955271510751,
+          "residual_standard_deviation": 4.155111168469415,
+          "rmse": 4.210423324038603
+        },
+        "row_count": 155
+      },
+      "group_columns": [
+        "Cement",
+        "Blast Furnace Slag",
+        "Fly Ash",
+        "Water",
+        "Superplasticizer",
+        "Coarse Aggregate",
+        "Fine Aggregate"
+      ],
+      "reference_partitions": [
+        "train",
+        "validation"
+      ],
+      "seen_group_row_count": 116,
+      "seen_groups": {
+        "metrics": {
+          "absolute_error_p50": 1.6563404313266048,
+          "absolute_error_p90": 5.569054663459294,
+          "absolute_error_p95": 6.535651035068372,
+          "mae": 2.1977552456924636,
+          "max_absolute_error": 8.741634504760754,
+          "medae": 1.6563404313266048,
+          "r2": 0.9699210652154358,
+          "residual_mean": 0.37974335446022717,
+          "residual_standard_deviation": 2.9433809070977355,
+          "rmse": 2.9551668160810673
+        },
+        "row_count": 116,
+        "status": "computed"
+      },
+      "unseen_group_row_count": 39,
+      "unseen_groups": {
+        "metrics": {
+          "absolute_error_p50": 1.1908438217982713,
+          "absolute_error_p90": 9.701963920177205,
+          "absolute_error_p95": 12.286262602536436,
+          "mae": 3.7255171721252927,
+          "max_absolute_error": 26.625235976627863,
+          "medae": 1.1908438217982713,
+          "r2": 0.841576740155913,
+          "residual_mean": 1.8818609638725714,
+          "residual_standard_deviation": 6.4820483188738764,
+          "rmse": 6.669407274472619
+        },
+        "row_count": 39,
+        "status": "computed"
+      },
+      "used_for_selection": false
+    },
+    "validation": {
+      "diagnostic_only": true,
+      "evaluated_partition": "validation",
+      "evaluated_row_count": 154,
+      "full": {
+        "metrics": {
+          "absolute_error_p50": 1.803285997936193,
+          "absolute_error_p90": 5.942625643362972,
+          "absolute_error_p95": 8.468055470625174,
+          "mae": 2.741655333532888,
+          "max_absolute_error": 16.79918128861533,
+          "medae": 1.803285997936193,
+          "r2": 0.9336427445907192,
+          "residual_mean": 0.23705091702095013,
+          "residual_standard_deviation": 4.093480083526029,
+          "rmse": 4.087048247290223
+        },
+        "row_count": 154
+      },
+      "group_columns": [
+        "Cement",
+        "Blast Furnace Slag",
+        "Fly Ash",
+        "Water",
+        "Superplasticizer",
+        "Coarse Aggregate",
+        "Fine Aggregate"
+      ],
+      "reference_partitions": [
+        "train"
+      ],
+      "seen_group_row_count": 111,
+      "seen_groups": {
+        "metrics": {
+          "absolute_error_p50": 2.096849045445623,
+          "absolute_error_p90": 5.949932078400003,
+          "absolute_error_p95": 7.882548519383862,
+          "mae": 2.719916451918587,
+          "max_absolute_error": 13.4556197187664,
+          "medae": 2.096849045445623,
+          "r2": 0.9477150315347184,
+          "residual_mean": 0.6311844147118522,
+          "residual_standard_deviation": 3.7097222401943934,
+          "rmse": 3.7465251274399973
+        },
+        "row_count": 111,
+        "status": "computed"
+      },
+      "unseen_group_row_count": 43,
+      "unseen_groups": {
+        "metrics": {
+          "absolute_error_p50": 1.397707758560454,
+          "absolute_error_p90": 5.170589652165016,
+          "absolute_error_p95": 11.8376492731346,
+          "mae": 2.797771981420969,
+          "max_absolute_error": 16.79918128861533,
+          "medae": 1.397707758560454,
+          "r2": 0.8762681022314627,
+          "residual_mean": -0.7803634607392856,
+          "residual_standard_deviation": 4.850573761686817,
+          "rmse": 4.856940253604413
+        },
+        "row_count": 43,
+        "status": "computed"
+      },
+      "used_for_selection": false
+    },
+    "varying_columns": [
+      "Age"
+    ]
+  },
+  "model_selection": {
+    "baseline": {
+      "family": "DummyRegressor",
+      "model_id": "dummy_median",
+      "strategy": "median",
+      "validation_metrics": {
+        "absolute_error_p50": 11.259999999999998,
+        "absolute_error_p90": 25.162000000000003,
+        "absolute_error_p95": 28.187,
+        "mae": 12.81448051948052,
+        "max_absolute_error": 41.72,
+        "medae": 11.259999999999998,
+        "r2": -0.0004944323226261371,
+        "residual_mean": -0.3527922077922058,
+        "residual_standard_deviation": 15.917695849972333,
+        "rmse": 15.869852678143362
+      }
+    },
+    "criteria_applied": [
+      "validation_mae"
+    ],
+    "family_search": [
+      {
+        "best_parameters": {
+          "model__max_depth": null,
+          "model__min_samples_leaf": 1
+        },
+        "candidate_count": 12,
+        "cv_metrics": {
+          "cv_mae_mean": 5.181078639846743,
+          "cv_mae_std": 0.6013184614705673,
+          "cv_medae_mean": 3.4400000000000004,
+          "cv_medae_std": 0.5251666402200359,
+          "cv_r2_mean": 0.7913724823814535,
+          "cv_r2_std": 0.039411041701036965,
+          "cv_rmse_mean": 7.594623943543259,
+          "cv_rmse_std": 0.6381794309912308
+        },
+        "family": "DecisionTreeRegressor",
+        "model_id": "decision_tree",
+        "search_space": {
+          "model__max_depth": [
+            3,
+            5,
+            8,
+            null
+          ],
+          "model__min_samples_leaf": [
+            1,
+            5,
+            10
+          ]
+        },
+        "search_strategy": "GridSearchCV",
+        "validation_metrics": {
+          "absolute_error_p50": 2.900000000000002,
+          "absolute_error_p90": 10.569000000000013,
+          "absolute_error_p95": 14.748999999999995,
+          "mae": 4.285974025974026,
+          "max_absolute_error": 26.339999999999996,
+          "medae": 2.900000000000002,
+          "r2": 0.8308796454277687,
+          "residual_mean": 0.7523376623376626,
+          "residual_standard_deviation": 6.5023708890954985,
+          "rmse": 6.524744310062143
+        }
+      },
+      {
+        "best_parameters": {
+          "model__l2_regularization": 1.0,
+          "model__learning_rate": 0.1,
+          "model__max_leaf_nodes": 15,
+          "model__min_samples_leaf": 10
+        },
+        "candidate_count": 24,
+        "cv_metrics": {
+          "cv_mae_mean": 3.2970607785736474,
+          "cv_mae_std": 0.28291333949152325,
+          "cv_medae_mean": 2.1024681408863177,
+          "cv_medae_std": 0.23654503492889906,
+          "cv_r2_mean": 0.913922849452503,
+          "cv_r2_std": 0.02353860003982278,
+          "cv_rmse_mean": 4.858881174059787,
+          "cv_rmse_std": 0.7136828371043975
+        },
+        "family": "HistGradientBoostingRegressor",
+        "model_id": "hist_gradient_boosting",
+        "search_space": {
+          "model__l2_regularization": [
+            0.0,
+            1.0
+          ],
+          "model__learning_rate": [
+            0.05,
+            0.1
+          ],
+          "model__max_leaf_nodes": [
+            15,
+            31
+          ],
+          "model__min_samples_leaf": [
+            10,
+            20,
+            40
+          ]
+        },
+        "search_strategy": "GridSearchCV",
+        "validation_metrics": {
+          "absolute_error_p50": 1.803285997936193,
+          "absolute_error_p90": 5.942625643362972,
+          "absolute_error_p95": 8.468055470625174,
+          "mae": 2.741655333532888,
+          "max_absolute_error": 16.79918128861533,
+          "medae": 1.803285997936193,
+          "r2": 0.9336427445907192,
+          "residual_mean": 0.23705091702095013,
+          "residual_standard_deviation": 4.093480083526029,
+          "rmse": 4.087048247290223
+        }
+      },
+      {
+        "best_parameters": {
+          "model__max_depth": null,
+          "model__max_features": 1.0,
+          "model__min_samples_leaf": 1
+        },
+        "candidate_count": 12,
+        "cv_metrics": {
+          "cv_mae_mean": 3.9851735114483944,
+          "cv_mae_std": 0.5188042859679992,
+          "cv_medae_mean": 2.9596642222222664,
+          "cv_medae_std": 0.313592037777194,
+          "cv_r2_mean": 0.8893301328349162,
+          "cv_r2_std": 0.029905688314175997,
+          "cv_rmse_mean": 5.514069038076448,
+          "cv_rmse_std": 0.7990265479822483
+        },
+        "family": "RandomForestRegressor",
+        "model_id": "random_forest",
+        "search_space": {
+          "model__max_depth": [
+            null,
+            12
+          ],
+          "model__max_features": [
+            1.0,
+            "sqrt"
+          ],
+          "model__min_samples_leaf": [
+            1,
+            3,
+            5
+          ]
+        },
+        "search_strategy": "GridSearchCV",
+        "validation_metrics": {
+          "absolute_error_p50": 2.538516666666588,
+          "absolute_error_p90": 8.507243333333335,
+          "absolute_error_p95": 11.600798111111168,
+          "mae": 3.7689297526283267,
+          "max_absolute_error": 20.666399999999918,
+          "medae": 2.538516666666588,
+          "r2": 0.8835316890332094,
+          "residual_mean": 0.6164466501752183,
+          "residual_standard_deviation": 5.396984340805642,
+          "rmse": 5.414638236004075
+        }
+      },
+      {
+        "best_parameters": {
+          "model__alpha": 0.1
+        },
+        "candidate_count": 4,
+        "cv_metrics": {
+          "cv_mae_mean": 8.281927895973684,
+          "cv_mae_std": 0.17224485456828914,
+          "cv_medae_mean": 6.442037276848687,
+          "cv_medae_std": 0.2040913778935238,
+          "cv_r2_mean": 0.6015240867027992,
+          "cv_r2_std": 0.06452938905023979,
+          "cv_rmse_mean": 10.498197122266493,
+          "cv_rmse_std": 0.46535876929153946
+        },
+        "family": "Ridge",
+        "model_id": "ridge",
+        "search_space": {
+          "model__alpha": [
+            0.1,
+            1.0,
+            10.0,
+            100.0
+          ]
+        },
+        "search_strategy": "GridSearchCV",
+        "validation_metrics": {
+          "absolute_error_p50": 7.16706010348021,
+          "absolute_error_p90": 17.554116656346775,
+          "absolute_error_p95": 21.478374178674464,
+          "mae": 8.594383353470793,
+          "max_absolute_error": 27.871960160562267,
+          "medae": 7.16706010348021,
+          "r2": 0.540641263643823,
+          "residual_mean": -0.9766682952839644,
+          "residual_standard_deviation": 10.743789114856575,
+          "rmse": 10.75329468176962
+        }
+      }
+    ],
+    "finalists": [
+      "hist_gradient_boosting"
+    ],
+    "practical_tie": false,
+    "practical_tie_tolerance": 0.1,
+    "primary_metric": "mae",
+    "primary_metric_direction": "lower_is_better",
+    "secondary_metrics": [
+      "rmse",
+      "r2",
+      "medae"
+    ],
+    "selected_estimator_fixed_constructor_parameters": {
+      "categorical_features": "from_dtype",
+      "early_stopping": "auto",
+      "l2_regularization": 0.0,
+      "learning_rate": 0.1,
+      "loss": "squared_error",
+      "max_bins": 255,
+      "max_features": 1.0,
+      "max_iter": 300,
+      "max_leaf_nodes": 31,
+      "min_samples_leaf": 20,
+      "n_iter_no_change": 10,
+      "random_state": 42,
+      "scoring": "loss",
+      "tol": 1e-07,
+      "validation_fraction": 0.1,
+      "verbose": 0,
+      "warm_start": false
+    },
+    "selected_feature_policy": "all_features",
+    "selected_hyperparameters": {
+      "model__l2_regularization": 1.0,
+      "model__learning_rate": 0.1,
+      "model__max_leaf_nodes": 15,
+      "model__min_samples_leaf": 10
+    },
+    "selected_model_family": "HistGradientBoostingRegressor",
+    "selected_model_id": "hist_gradient_boosting",
+    "selected_preprocessing": {
+      "categorical_features": [],
+      "fit_scope": "training_partition_or_training_fold_only",
+      "numerical_features": [
+        "Cement",
+        "Blast Furnace Slag",
+        "Fly Ash",
+        "Water",
+        "Superplasticizer",
+        "Coarse Aggregate",
+        "Fine Aggregate",
+        "Age"
+      ],
+      "scale_numerical": false,
+      "scaler": null,
+      "type": "Pipeline"
+    },
+    "test_in_search": false,
+    "validation_in_search": false,
+    "validation_ranking": [
+      {
+        "cv_mae_std": 0.28291333949152325,
+        "eligible": true,
+        "family": "HistGradientBoostingRegressor",
+        "model_id": "hist_gradient_boosting",
+        "validation_mae": 2.741655333532888,
+        "validation_medae": 1.803285997936193,
+        "validation_r2": 0.9336427445907192,
+        "validation_rmse": 4.087048247290223
+      },
+      {
+        "cv_mae_std": 0.5188042859679992,
+        "eligible": true,
+        "family": "RandomForestRegressor",
+        "model_id": "random_forest",
+        "validation_mae": 3.7689297526283267,
+        "validation_medae": 2.538516666666588,
+        "validation_r2": 0.8835316890332094,
+        "validation_rmse": 5.414638236004075
+      },
+      {
+        "cv_mae_std": 0.6013184614705673,
+        "eligible": true,
+        "family": "DecisionTreeRegressor",
+        "model_id": "decision_tree",
+        "validation_mae": 4.285974025974026,
+        "validation_medae": 2.900000000000002,
+        "validation_r2": 0.8308796454277687,
+        "validation_rmse": 6.524744310062143
+      },
+      {
+        "cv_mae_std": 0.17224485456828914,
+        "eligible": true,
+        "family": "Ridge",
+        "model_id": "ridge",
+        "validation_mae": 8.594383353470793,
+        "validation_medae": 7.16706010348021,
+        "validation_r2": 0.540641263643823,
+        "validation_rmse": 10.75329468176962
+      }
+    ]
+  },
+  "protocol": {
+    "diagnostics_used_for_selection": false,
+    "row_level_predictions_persisted": false,
+    "test_opened_after_freeze_and_final_fit": true,
+    "test_used_for_adjustment": false
+  },
+  "reference_verification": {
+    "checked": 55,
+    "differences": [
+      {
+        "delta": -1.7763568394002505e-15,
+        "equal": false,
+        "manifest": 8.594383353470793,
+        "quantity": "validation_ranking.ridge.validation_mae",
+        "reference": 8.594383353470795
+      },
+      {
+        "delta": -1.4210854715202004e-14,
+        "equal": false,
+        "manifest": 7.16706010348021,
+        "quantity": "validation_ranking.ridge.validation_medae",
+        "reference": 7.167060103480225
+      },
+      {
+        "delta": -7.771561172376096e-16,
+        "equal": false,
+        "manifest": 0.17224485456828914,
+        "quantity": "validation_ranking.ridge.cv_mae_std",
+        "reference": 0.17224485456828992
+      }
+    ],
+    "equal": 52,
+    "max_absolute_numeric_difference": 1.4210854715202004e-14,
+    "reference": "committed executed notebooks and README of the canonical run"
+  },
+  "runtime": {
+    "implementation": "CPython",
+    "lock_file": "pylock.toml",
+    "packages": {
+      "joblib": "1.5.3",
+      "matplotlib": "3.11.2",
+      "numpy": "2.5.2",
+      "pandas": "3.0.3",
+      "scikit-learn": "1.9.0",
+      "scipy": "1.18.0",
+      "ucimlrepo": "0.0.7"
+    },
+    "platform": "Linux-x86_64",
+    "python": "3.12.13",
+    "python_version_file": ".python-version",
+    "recorded_by_final_bundle": {
+      "joblib": "1.5.3",
+      "numpy": "2.5.2",
+      "pandas": "3.0.3",
+      "python": "3.12.13",
+      "scikit_learn": "1.9.0"
+    }
+  },
+  "schema_version": "canonical-run.v1",
+  "selected_cv_metrics": {
+    "cv_mae_mean": 3.2970607785736474,
+    "cv_mae_std": 0.28291333949152325,
+    "cv_medae_mean": 2.1024681408863177,
+    "cv_medae_std": 0.23654503492889906,
+    "cv_r2_mean": 0.913922849452503,
+    "cv_r2_std": 0.02353860003982278,
+    "cv_rmse_mean": 4.858881174059787,
+    "cv_rmse_std": 0.7136828371043975
+  },
+  "split": {
+    "fractions": {
+      "test": 0.15,
+      "train": 0.7,
+      "validation": 0.15
+    },
+    "membership_digest": "sha256 of the partition's membership tokens joined by newlines in source order",
+    "membership_kind": "technical_row_occurrence",
+    "membership_sha256": {
+      "test": "470fcf94ef46f164127868ec9a6ed794182ea771dff561a5026932e35a06f343",
+      "train": "4505ecab03ab1b1451b638a0806750ebd81e496c8f11e5741479839995962911",
+      "validation": "0456cfec7f9116e8a822f63d26065b3b642fc0ff7f81ae5eca3cfc2cbf80ee4f"
+    },
+    "partition_sha256": {
+      "test": "fb53b5eaf97bead006da148f12c412f79f6422680b5494d556c7bde85a869f79",
+      "train": "178807deec898a73013a3eedad9fd2a2a8fa5ff747e9c6b220e46370c6261dbd",
+      "validation": "9b73adcd6e282758d2819557695e969bc0bb09773694edea58315576894db727"
+    },
+    "row_counts": {
+      "test": 155,
+      "train": 721,
+      "validation": 154
+    },
+    "shuffle": true,
+    "split_id": null,
+    "split_method": "two_stage_sklearn_train_test_split_shuffled_non_stratified_source_positions",
+    "stage_seeds": {
+      "train_vs_temporary": 42,
+      "validation_vs_test": 43
+    },
+    "stratify_by": null
+  },
+  "target": {
+    "classes": null,
+    "column": "Concrete compressive strength",
+    "decision_threshold": null,
+    "positive_class": null,
+    "problem_type": "continuous_regression",
+    "semantics": "Continuous / quantitative",
+    "unit": "MPa"
+  },
+  "validation_metrics": {
+    "absolute_error_p50": 1.803285997936193,
+    "absolute_error_p90": 5.942625643362972,
+    "absolute_error_p95": 8.468055470625174,
+    "mae": 2.741655333532888,
+    "max_absolute_error": 16.79918128861533,
+    "medae": 1.803285997936193,
+    "r2": 0.9336427445907192,
+    "residual_mean": 0.23705091702095013,
+    "residual_standard_deviation": 4.093480083526029,
+    "rmse": 4.087048247290223
+  }
+}
